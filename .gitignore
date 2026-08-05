@@ -1,0 +1,12 @@
+# 依赖
+node_modules/
+
+# 运行时数据（含用户环境配置与 Token，不入库）
+data/
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db

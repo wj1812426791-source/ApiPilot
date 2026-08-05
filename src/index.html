@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>ApiPilot</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ======================= 顶部标题栏 ======================= -->
+<header class="titlebar">
+  <div class="tb-left">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <circle cx="12" cy="12" r="11" fill="#FF6C37"/>
+        <path d="M8 16.5 L15.5 7.5 M8 16.5 L11 15 M8 16.5 L9.5 13.5" stroke="#fff" stroke-width="1.6"
+              stroke-linecap="round" fill="none"/>
+      </svg>
+      <span>ApiPilot</span>
+    </div>
+    <button class="tb-btn" id="btnImport" title="导入 Postman 集合 / cURL">导入</button>
+    <button class="tb-btn" id="btnExport" title="导出集合">导出</button>
+  </div>
+
+  <div class="tb-center">
+    <div class="token-chip" id="tokenChip" title="当前环境 Token 状态">
+      <span class="dot" id="tokenDot"></span>
+      <span id="tokenChipText">未配置登录</span>
+    </div>
+  </div>
+
+  <div class="tb-right">
+    <select class="env-select" id="envSelect" title="选择环境"></select>
+    <button class="tb-icon" id="btnEnvManage" title="管理环境">
+      <svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M13.3 9.6a1 1 0 0 0 .2 1.1l.1.1a1.2 1.2 0 1 1-1.7 1.7l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9v.2a1.2 1.2 0 0 1-2.4 0V13a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a1.2 1.2 0 1 1-1.7-1.7l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6h-.2a1.2 1.2 0 0 1 0-2.4H3a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a1.2 1.2 0 1 1 1.7-1.7l.1.1a1 1 0 0 0 1.1.2H6.6a1 1 0 0 0 .6-.9v-.2a1.2 1.2 0 0 1 2.4 0V3a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.2 1.2 0 1 1 1.7 1.7l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6h.2a1.2 1.2 0 0 1 0 2.4H13a1 1 0 0 0-.9.6z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+    </button>
+    <button class="tb-icon" id="btnSettings" title="设置">
+      <svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="3" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="13" r="1.3" fill="currentColor"/></svg>
+    </button>
+    <div class="win-controls">
+      <button class="win-btn" data-win="minimize" title="最小化"><svg viewBox="0 0 10 10" width="10" height="10"><path d="M0 5h10" stroke="currentColor" stroke-width="1"/></svg></button>
+      <button class="win-btn" data-win="maximize" title="最大化"><svg viewBox="0 0 10 10" width="10" height="10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+      <button class="win-btn danger" data-win="close" title="关闭"><svg viewBox="0 0 10 10" width="10" height="10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<!-- ======================= 主体 ======================= -->
+<div class="main">
+
+  <!-- 侧边栏 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-tabs">
+      <button class="side-tab active" data-side="collections">集合</button>
+      <button class="side-tab" data-side="history">历史</button>
+    </div>
+
+    <div class="side-toolbar">
+      <input type="text" class="side-search" id="sideSearch" placeholder="搜索…" spellcheck="false">
+      <button class="side-new" id="btnNewCollection" title="新建集合">+</button>
+    </div>
+
+    <div class="side-body">
+      <div class="side-pane active" id="paneCollections">
+        <div class="tree" id="tree"></div>
+        <div class="empty-hint" id="collectionsEmpty">
+          <p>还没有集合</p>
+          <button class="link-btn" id="btnCreateFirst">新建一个集合</button>
+        </div>
+      </div>
+      <div class="side-pane" id="paneHistory">
+        <div class="history-list" id="historyList"></div>
+      </div>
+    </div>
+
+    <div class="side-footer">
+      <span id="dataDirHint" class="muted-sm" title="点击打开数据目录">数据目录</span>
+    </div>
+  </aside>
+
+  <div class="splitter-v" id="splitV"></div>
+
+  <!-- 工作区 -->
+  <section class="workspace">
+    <!-- 请求标签页 -->
+    <div class="tabbar" id="tabbar">
+      <div class="tabs" id="tabs"></div>
+      <button class="tab-add" id="btnNewTab" title="新建请求 (Ctrl+N)">+</button>
+    </div>
+
+    <div class="workspace-row" id="workspaceRow">
+      <div class="workspace-body" id="workspaceBody">
+
+      <!-- 无标签时的欢迎页 -->
+      <div class="welcome" id="welcome">
+        <svg viewBox="0 0 24 24" width="56" height="56" aria-hidden="true">
+          <circle cx="12" cy="12" r="11" fill="none" stroke="#FF6C37" stroke-width="1.2"/>
+          <path d="M8 16.5 L15.5 7.5 M8 16.5 L11 15 M8 16.5 L9.5 13.5" stroke="#FF6C37" stroke-width="1.2"
+                stroke-linecap="round" fill="none"/>
+        </svg>
+        <h2>ApiPilot</h2>
+        <p>新建一个请求，或者从左侧集合里挑一个开始。</p>
+        <div class="welcome-actions">
+          <button class="btn primary" id="btnWelcomeNew">新建请求</button>
+          <button class="btn" id="btnWelcomeEnv">配置环境与登录</button>
+        </div>
+        <ul class="welcome-tips">
+          <li><b>{{变量}}</b> 在 URL、请求头、请求体里都能用</li>
+          <li>环境里配好登录动作后，<b>Token 自动获取、过期自动重登</b></li>
+          <li><b>Ctrl+Enter</b> 发送 · <b>Ctrl+S</b> 保存 · <b>Ctrl+N</b> 新建</li>
+        </ul>
+      </div>
+
+      <!-- 请求编辑区 -->
+      <div class="req-area" id="reqArea" hidden>
+        <div class="url-bar">
+          <div class="method-wrap">
+            <select class="method-select" id="methodSelect">
+              <option>GET</option><option>POST</option><option>PUT</option>
+              <option>PATCH</option><option>DELETE</option><option>HEAD</option>
+              <option>OPTIONS</option>
+            </select>
+          </div>
+          <div class="url-input-wrap">
+            <div class="url-highlight" id="urlHighlight"></div>
+            <input type="text" class="url-input" id="urlInput" spellcheck="false"
+                   placeholder="输入请求 URL，例如 {{baseUrl}}/api/user/list">
+          </div>
+          <button class="btn primary send-btn" id="btnSend">发送</button>
+          <button class="btn save-btn" id="btnSave" title="保存 (Ctrl+S)">保存</button>
+        </div>
+
+        <div class="req-tabs" id="reqTabs">
+          <button class="req-tab active" data-rt="params">Params<span class="cnt" id="cntParams"></span></button>
+          <button class="req-tab" data-rt="auth">Auth<span class="cnt" id="cntAuth"></span></button>
+          <button class="req-tab" data-rt="headers">Headers<span class="cnt" id="cntHeaders"></span></button>
+          <button class="req-tab" data-rt="body">Body<span class="cnt" id="cntBody"></span></button>
+          <button class="req-tab" data-rt="settings">设置</button>
+        </div>
+
+        <div class="req-panels" id="reqPanels">
+          <div class="req-panel active" data-rp="params">
+            <div class="panel-caption">Query 参数（URL 与表格双向同步）</div>
+            <div class="kv-table" id="kvParams"></div>
+            <div class="panel-caption mt">路径变量 <span class="muted-sm">（URL 中形如 /user/:id）</span></div>
+            <div class="kv-table" id="kvPathVars"></div>
+          </div>
+
+          <div class="req-panel" data-rp="auth">
+            <div class="auth-box">
+              <label class="field">
+                <span class="field-label">认证方式</span>
+                <select id="authType" class="input">
+                  <option value="inherit">跟随环境（自动带 Token）</option>
+                  <option value="none">不认证</option>
+                  <option value="bearer">Bearer Token</option>
+                  <option value="basic">Basic Auth</option>
+                  <option value="apikey">API Key</option>
+                </select>
+              </label>
+              <div id="authFields" class="auth-fields"></div>
+              <div class="auth-note" id="authNote"></div>
+            </div>
+          </div>
+
+          <div class="req-panel" data-rp="headers">
+            <div class="panel-caption">请求头</div>
+            <div class="kv-table" id="kvHeaders"></div>
+            <div class="panel-caption mt">自动附加 <span class="muted-sm">（发送时由 ApiPilot 补齐）</span></div>
+            <div class="auto-headers" id="autoHeaders"></div>
+          </div>
+
+          <div class="req-panel" data-rp="body">
+            <div class="body-modes" id="bodyModes">
+              <label><input type="radio" name="bodyMode" value="none" checked> none</label>
+              <label><input type="radio" name="bodyMode" value="formdata"> form-data</label>
+              <label><input type="radio" name="bodyMode" value="urlencoded"> x-www-form-urlencoded</label>
+              <label><input type="radio" name="bodyMode" value="raw"> raw</label>
+              <select id="rawType" class="mini-select">
+                <option value="application/json">JSON</option>
+                <option value="text/plain">Text</option>
+                <option value="application/xml">XML</option>
+                <option value="text/html">HTML</option>
+                <option value="application/javascript">JavaScript</option>
+              </select>
+              <button class="mini-btn" id="btnFormatBody" title="格式化 JSON">美化</button>
+            </div>
+            <div class="body-holder">
+              <div class="body-view" id="bodyNone">
+                <div class="body-empty">此请求没有 Body</div>
+              </div>
+              <div class="body-view" id="bodyFormData" hidden>
+                <div class="kv-table" id="kvFormData"></div>
+              </div>
+              <div class="body-view" id="bodyUrlEncoded" hidden>
+                <div class="kv-table" id="kvUrlEncoded"></div>
+              </div>
+              <div class="body-view" id="bodyRaw" hidden>
+                <textarea class="code-area" id="rawBody" spellcheck="false"
+                          placeholder='{ "username": "admin", "password": "123456" }'></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="req-panel" data-rp="settings">
+            <div class="settings-box">
+              <label class="switch-row">
+                <input type="checkbox" id="setFollowRedirect" checked>
+                <span>自动跟随重定向</span>
+              </label>
+              <label class="switch-row">
+                <input type="checkbox" id="setIgnoreSSL" checked>
+                <span>忽略 SSL 证书错误<em>（内网自签证书需要开启）</em></span>
+              </label>
+              <label class="switch-row">
+                <input type="checkbox" id="setUseCookie" checked>
+                <span>自动携带 Cookie（Session 型登录需要）</span>
+              </label>
+              <label class="field inline">
+                <span class="field-label">超时时间(ms)</span>
+                <input type="number" id="setTimeout" class="input small" value="60000" min="1000" step="1000">
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="splitter-h" id="splitH"></div>
+
+        <!-- 响应区 -->
+        <div class="res-area" id="resArea">
+          <div class="res-head">
+            <div class="res-tabs">
+              <button class="res-tab active" data-st="body">Body</button>
+              <button class="res-tab" data-st="headers">Headers<span class="cnt" id="cntResHeaders"></span></button>
+              <button class="res-tab" data-st="request">实际发出</button>
+            </div>
+            <div class="res-meta" id="resMeta"></div>
+          </div>
+
+          <div class="res-panels">
+            <div class="res-panel active" data-sp="body">
+              <div class="res-body-toolbar" id="resBodyToolbar" hidden>
+                <div class="seg">
+                  <button class="seg-btn active" data-view="pretty">Pretty</button>
+                  <button class="seg-btn" data-view="raw">Raw</button>
+                  <button class="seg-btn" data-view="preview">Preview</button>
+                </div>
+                <div class="spacer"></div>
+                <input type="text" class="res-filter" id="resFilter" placeholder="过滤 JSON 路径，如 data.list.0.name">
+                <button class="mini-btn" id="btnCopyRes">复制</button>
+                <button class="mini-btn" id="btnSaveRes">保存</button>
+              </div>
+              <div class="res-content" id="resContent">
+                <div class="res-placeholder">
+                  <p>点击「发送」查看响应</p>
+                </div>
+              </div>
+            </div>
+            <div class="res-panel" data-sp="headers">
+              <div class="res-content" id="resHeaders"></div>
+            </div>
+            <div class="res-panel" data-sp="request">
+              <div class="res-content" id="resRequest"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 定时任务：对应接口设置右侧的常驻执行日志面板（带清除按钮，平时不隐藏） -->
+      <aside class="schedule-panel" id="schedulePanel">
+        <div class="sp-head">
+          <span class="sp-ico">⏰</span>
+          <span class="sp-title">执行日志</span>
+          <span class="sp-log-count" id="spLogCount">0 次</span>
+          <span class="spacer"></span>
+          <button class="mini-btn" id="spClearLog">清空</button>
+        </div>
+        <div class="sp-log" id="spLog"></div>
+      </aside>
+    </div>
+  </div>
+  </section>
+</div>
+
+<!-- ======================= 弹层 ======================= -->
+<div class="modal-root" id="modalRoot" hidden></div>
+<div class="ctx-menu" id="ctxMenu" hidden></div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/vars.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/http.js"></script>
+<script src="js/tree.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/response.js"></script>
+<script src="js/env.js"></script>
+<script src="js/importer.js"></script>
+<script src="js/scheduler.js"></script>
+<script src="js/selftest.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "name": "apipilot",
+  "version": "1.0.0",
+  "description": "ApiPilot - 本地 API 调试工具（Postman 风格，支持环境登录自动取 Token）",
+  "main": "main.js",
+  "author": "wangjia",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "mock": "node mock-server.js",
+    "selftest": "electron . --selftest",
+    "dist": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "build": {
+    "appId": "com.larfe.apipilot",
+    "productName": "ApiPilot",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}
