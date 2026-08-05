@@ -83,9 +83,9 @@ D:\ApiPilot\
 
 | 变量名 | 值 |
 |---|---|
-| baseUrl | `http://jn.larfe.net:40002` |
-| username | `admin` |
-| password | `123456` |
+| baseUrl | `https://api.example.com`（示例，换成你自己的服务地址） |
+| username | `your_username` |
+| password | `your_password` |
 
 请求里用 `{{baseUrl}}/api/user/list` 引用。
 
