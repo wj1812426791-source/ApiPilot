@@ -11,8 +11,11 @@ const { URL } = require('url');
 
 // ---------------------------------------------------------------------------
 // 数据目录：按用户习惯放在 D 盘项目目录下，不污染 C:\Users\...\AppData
+// 自检模式自动隔离到 data/selftest，绝不污染真实数据（防再次冲掉用户环境）
 // ---------------------------------------------------------------------------
-const DATA_DIR = process.env.APIPILOT_DATA_DIR || path.join(__dirname, 'data');
+const IS_SELFTEST = process.argv.includes('--selftest');
+const DATA_DIR = process.env.APIPILOT_DATA_DIR
+  || (IS_SELFTEST ? path.join(__dirname, 'data', 'selftest') : path.join(__dirname, 'data'));
 const STORE_FILE = path.join(DATA_DIR, 'workspace.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backup');
 
@@ -25,7 +28,6 @@ if (!app || typeof app.whenReady !== 'function') {
   process.exit(1);
 }
 
-const IS_SELFTEST = process.argv.includes('--selftest');
 const NO_GPU = IS_SELFTEST || process.argv.includes('--no-gpu') || process.env.APIPILOT_NO_GPU === '1';
 
 try {
