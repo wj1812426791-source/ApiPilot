@@ -234,6 +234,7 @@
               <button class="res-tab active" data-st="body">Body</button>
               <button class="res-tab" data-st="headers">Headers<span class="cnt" id="cntResHeaders"></span></button>
               <button class="res-tab" data-st="request">实际发出</button>
+              <button class="res-tab" data-st="schedule">日志<span class="cnt" id="cntScheduleLog"></span></button>
             </div>
             <div class="res-meta" id="resMeta"></div>
           </div>
@@ -263,21 +264,21 @@
             <div class="res-panel" data-sp="request">
               <div class="res-content" id="resRequest"></div>
             </div>
+            <div class="res-panel" data-sp="schedule">
+              <div class="schedule-log-toolbar">
+                <span class="slt-title">⏰ 定时任务执行日志</span>
+                <span class="spacer"></span>
+                <span class="muted-sm" id="scheduleLogHint"></span>
+                <button class="mini-btn" id="spClearLog">清空</button>
+              </div>
+              <div class="res-content" id="resScheduleLog">
+                <div class="res-placeholder"><p>开启定时任务后，这里会显示每次发送与返回的日志</p></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- 定时任务：对应接口设置右侧的常驻执行日志面板（带清除按钮，平时不隐藏） -->
-      <aside class="schedule-panel" id="schedulePanel">
-        <div class="sp-head">
-          <span class="sp-ico">⏰</span>
-          <span class="sp-title">执行日志</span>
-          <span class="sp-log-count" id="spLogCount">0 次</span>
-          <span class="spacer"></span>
-          <button class="mini-btn" id="spClearLog">清空</button>
-        </div>
-        <div class="sp-log" id="spLog"></div>
-      </aside>
     </div>
   </div>
   </section>

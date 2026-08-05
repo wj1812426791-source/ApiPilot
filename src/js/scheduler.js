@@ -6,8 +6,8 @@
    - log：每次执行的发送/响应记录（最多保留 200 条）
    - 随 workspace.json 自动持久化，重启后未过期任务会自动续期
    - 点击「定时任务…」弹出一个**小弹窗（仅配置：发送间隔 / 持续时长 / 启停）**；
-     每次执行的「发出的请求 + 服务器返回」实时显示在**请求设置右侧的常驻日志面板**
-     中（带「清空」按钮，平时不隐藏），风格与响应区一致。
+     每次执行的「发出的请求 + 服务器返回」实时显示在**响应区「日志」页签**
+     中（带「清空」按钮），风格与响应区一致。
    ========================================================================= */
 const Scheduler = (() => {
 
@@ -150,14 +150,14 @@ const Scheduler = (() => {
     });
   }
 
-  /* ------------------------------ 面板（右侧常驻） ------------------------------ */
+  /* ------------------------------ 设置弹窗 ------------------------------ */
   function field(label, input) {
     return U.el('label', { class: 'field' }, [U.el('span', { class: 'field-label', text: label }), input]);
   }
 
   function open(req) {
     currentReqId = req.id;
-    Editor.openRequest(req.id);                 // 打开该请求，editor 会刷新右侧日志面板
+    Editor.openRequest(req.id);                 // 打开该请求，editor 会刷新响应区日志页签
 
     const wrap = U.el('div', { class: 'sched-modal' });
     const config = U.el('div', { class: 'sp-config', id: 'spConfig' });
@@ -169,17 +169,16 @@ const Scheduler = (() => {
       body: wrap,
       onMount: () => {
         renderConfig(req);
-        renderLog(req);   // 右侧常驻日志面板同步显示该请求的记录
+        renderLog(req);   // 响应区「日志」页签同步显示该请求的记录
       }
     });
   }
 
   function close() {
     UI.close();
-    // 注意：不清除 currentReqId，关闭设置弹窗后右侧日志面板仍持续展示当前请求的记录
   }
 
-  /* 右侧常驻日志面板：绑定清除按钮 + 切换请求时刷新 */
+  /* 响应区「日志」页签：绑定清除按钮 + 切换请求时刷新 */
   function bindPanelOnce() {
     if (panelBound) return;
     panelBound = true;
@@ -330,17 +329,18 @@ const Scheduler = (() => {
   }
 
   function renderLog(req) {
-    const box = U.$('#spLog');
+    const box = U.$('#resScheduleLog');
     if (!box) return;
     const log = (req && req.schedule && req.schedule.log) || [];
-    const countEl = U.$('#spLogCount');
-    if (countEl) countEl.textContent = ((req && req.schedule && req.schedule.runCount) || 0) + ' 次';
+    const countEl = U.$('#cntScheduleLog');
+    if (countEl) countEl.textContent = log.length ? String(log.length) : '';
+    const hint = U.$('#scheduleLogHint');
+    if (hint) hint.textContent = req ? (req.name || '未命名请求') : '';
     box.innerHTML = '';
     if (!log.length) {
-      box.appendChild(U.el('div', {
-        class: 'sp-empty',
-        text: '暂无执行记录，开启后这里会实时显示每次发送的请求与服务器返回。'
-      }));
+      box.appendChild(U.el('div', { class: 'res-placeholder' }, [
+        U.el('p', { text: '暂无执行记录，开启后这里会实时显示每次发送的请求与服务器返回。' })
+      ]));
       return;
     }
     for (let i = log.length - 1; i >= 0; i--) box.appendChild(renderEntry(log[i]));

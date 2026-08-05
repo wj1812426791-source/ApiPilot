@@ -237,11 +237,12 @@ const SelfTest = (() => {
     check('定时任务：设置弹窗（小）已打开', !U.$('#modalRoot').hidden && !!U.$('#modalRoot .sp-config input'));
     const bgOf = (s) => getComputedStyle(U.$(s)).backgroundColor;
     check('定时任务：弹窗配置区背景不透明', bgOf('#modalRoot .sp-config') !== 'rgba(0, 0, 0, 0)', bgOf('#modalRoot .sp-config'));
-    // 右侧常驻日志面板
-    const sp = U.$('#schedulePanel');
-    check('定时任务：右侧日志面板存在且常驻', !!sp && !!sp.querySelector('#spLog'));
-    check('定时任务：日志面板背景不透明', getComputedStyle(sp).backgroundColor !== 'rgba(0, 0, 0, 0)', getComputedStyle(sp).backgroundColor);
-    check('定时任务：日志面板含清除按钮', !!sp.querySelector('#spClearLog'));
+    // 响应区「日志」页签
+    const logTab = U.$('.res-tab[data-st="schedule"]');
+    check('定时任务：响应区存在「日志」页签', !!logTab, logTab && logTab.textContent);
+    const logPanel = U.$('.res-panel[data-sp="schedule"]');
+    check('定时任务：日志页签面板存在', !!logPanel && !!logPanel.querySelector('#resScheduleLog'));
+    check('定时任务：日志面板含清除按钮', !!U.$('#spClearLog'));
     Scheduler.close();
 
     schedReq.schedule = {

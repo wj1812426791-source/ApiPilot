@@ -285,20 +285,11 @@ input, select, textarea { outline: none; }
 
 .workspace-body { flex: 1; min-height: 0; position: relative; }
 
-/* ---------- 定时任务右侧面板 ---------- */
+/* ---------- 定时任务 ---------- */
 .workspace-row { flex: 1; min-height: 0; display: flex; }
 
-/* 定时任务：请求设置右侧的常驻执行日志面板 */
-.schedule-panel { width: 340px; flex: none; display: flex; flex-direction: column; background: #fff; border-left: 1px solid var(--border); min-width: 0; }
-.schedule-panel .sp-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: #fff; border-bottom: 1px solid var(--border); flex: none; }
-.schedule-panel .sp-head .sp-ico { font-size: 15px; }
-.schedule-panel .sp-head .sp-title { font-weight: 700; font-size: 13px; }
-.schedule-panel .sp-head .sp-log-count { color: var(--text-3); font-size: 11.5px; }
-.schedule-panel .sp-head .spacer { flex: 1; }
-/* 定时任务居中弹窗内的内容布局 */
+/* 定时任务设置弹窗 */
 .sched-modal { display: flex; flex-direction: column; height: 100%; }
-.sp-log-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-
 .sp-config { padding: 12px; background: #fff; border-bottom: 1px solid var(--border); flex: none; }
 .sched-form { display: flex; flex-direction: column; gap: 10px; }
 .sched-form .field { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
@@ -310,11 +301,13 @@ input, select, textarea { outline: none; }
 .sp-config-foot { display: flex; gap: 8px; margin-top: 4px; }
 .sp-config-foot .btn { flex: 1; }
 
-.sp-log-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--border); background: var(--bg-soft); flex: none; }
-.sp-log-head > span:first-child { font-weight: 600; }
-.sp-log-head .sp-log-count { color: var(--text-3); font-weight: 400; }
-.sp-log-head .spacer { flex: 1; }
-.sp-log { flex: 1; overflow: auto; padding: 8px; background: var(--bg-soft); }
+/* 响应区「日志」页签 */
+.schedule-log-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 14px; border-bottom: 1px solid var(--border); background: var(--bg-soft); flex: none;
+}
+.schedule-log-toolbar .slt-title { font-weight: 600; font-size: 12.5px; }
+.schedule-log-toolbar .spacer { flex: 1; }
 
 .sp-entry { border: 1px solid var(--border); border-radius: 8px; background: #fff; margin-bottom: 8px; overflow: hidden; }
 .sp-entry-head { display: flex; align-items: center; gap: 7px; padding: 7px 9px; cursor: pointer; }
