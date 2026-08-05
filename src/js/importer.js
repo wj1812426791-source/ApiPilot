@@ -447,5 +447,79 @@ const Importer = (() => {
     return true;
   }
 
-  return { fromPostman, toPostman, fromCurl, toCurl, importDialog, exportDialog, exportCollection, tryImportApiPilotBundle };
+  /* ==================================================================
+     环境导入/导出（单环境 _apipilotEnv / 完整 _apipilot 包 / 裸数组 / 裸对象）
+     ================================================================== */
+  async function exportEnvironment(env) {
+    if (!env) { UI.toast('没有可导出的环境', 'warn'); return; }
+    const data = {
+      _apipilotEnv: true,
+      name: env.name,
+      variables: env.variables || [],
+      login: env.login || null,
+      // 导出包里不含运行时 Token（每次登录重新获取），避免凭据泄漏
+      exportedAt: new Date().toISOString()
+    };
+    const r = await window.api.saveDialog({
+      defaultPath: `${env.name.replace(/[\\/:*?"<>|]/g, '_')}-环境.json`,
+      content: JSON.stringify(data, null, 2)
+    });
+    if (r.ok) UI.toast('已导出环境「' + env.name + '」', 'ok', 3000);
+  }
+
+  /** 把导入的原始环境对象整理成合法环境（新 id、剥离 Token、默认值兜底） */
+  function sanitizeImportedEnv(e) {
+    const login = e.login ? { ...Store.DEFAULT_LOGIN(), ...e.login } : Store.DEFAULT_LOGIN();
+    return {
+      id: U.uid('env'),
+      name: e.name || '导入的环境',
+      variables: Array.isArray(e.variables)
+        ? e.variables.map((v) => ({
+          key: v.key || '', value: v.value || '', desc: v.desc || '', enabled: v.enabled !== false
+        }))
+        : [],
+      login,
+      token: Store.DEFAULT_TOKEN()
+    };
+  }
+
+  async function importEnvironmentsFromFile() {
+    const r = await window.api.openDialog({
+      properties: ['openFile'], readAsText: true,
+      filters: [{ name: 'JSON', extensions: ['json'] }, { name: '全部文件', extensions: ['*'] }]
+    });
+    if (!r.ok) return null;
+
+    let json;
+    try { json = JSON.parse(r.content); }
+    catch (e) { UI.toast('文件不是合法 JSON：' + e.message, 'err'); return null; }
+
+    let raw = [];
+    if (json && json._apipilotEnv) raw = [json];
+    else if (json && json._apipilot && Array.isArray(json.environments)) raw = json.environments;
+    else if (Array.isArray(json)) raw = json.filter((x) => x && (x.name || x.variables || x.login));
+    else if (json && (json.name || json.variables || json.login)) raw = [json];
+    else {
+      UI.toast('未识别到环境数据（需要 _apipilotEnv 或含 name/variables/login 的 JSON）', 'warn');
+      return null;
+    }
+
+    if (!raw.length) { UI.toast('文件里没有可导入的环境', 'warn'); return null; }
+
+    const added = [];
+    for (const e of raw) {
+      const env = sanitizeImportedEnv(e);
+      Store.state.environments.push(env);
+      added.push(env.name);
+    }
+    Store.save();
+    App.refreshEnvSelect();
+    return { count: added.length, names: added };
+  }
+
+  return {
+    fromPostman, toPostman, fromCurl, toCurl,
+    importDialog, exportDialog, exportCollection, tryImportApiPilotBundle,
+    exportEnvironment, importEnvironmentsFromFile
+  };
 })();

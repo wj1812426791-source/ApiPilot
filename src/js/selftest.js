@@ -197,6 +197,52 @@ const SelfTest = (() => {
       back.item[0].item[0].request.url.raw === 'http://x.com/a?q=1',
       back.item[0].item[0].request.url.raw);
 
+    /* 13b. 环境导入/导出 */
+    const sampleEnv = {
+      _apipilotEnv: true,
+      name: '导入导出测试环境',
+      variables: [{ key: 'baseUrl', value: 'http://example.com', desc: '', enabled: true }],
+      login: { enabled: true, url: '{{baseUrl}}/login', tokenPath: 'data.token' }
+    };
+    const prevOpen = window.api.openDialog;
+    const stubOpen = (obj) => { window.api.openDialog = async () => ({ ok: true, content: JSON.stringify(obj) }); };
+    try {
+      stubOpen(sampleEnv);
+      const r1 = await Importer.importEnvironmentsFromFile();
+      check('环境导入：_apipilotEnv 返回 1 个', r1 && r1.count === 1, r1 ? r1.names.join(',') : 'null');
+      const imp1 = Store.state.environments.find((e) => e.name === '导入导出测试环境');
+      check('环境导入：已加入环境列表', !!imp1);
+      check('环境导入：生成新的唯一 id', imp1 && typeof imp1.id === 'string' && imp1.id.length > 4, imp1 && imp1.id);
+      check('环境导入：变量正确导入', imp1 && imp1.variables.length === 1 && imp1.variables[0].value === 'http://example.com');
+      check('环境导入：Token 被剥离（不含运行时凭据）', imp1 && imp1.token && imp1.token.value === '');
+      check('环境导入：login 默认值兜底', imp1 && imp1.login && imp1.login.injectTo === 'header' && imp1.login.tokenPath === 'data.token');
+
+      // 裸对象
+      stubOpen({ name: '裸对象环境', variables: [] });
+      const r2 = await Importer.importEnvironmentsFromFile();
+      check('环境导入：裸对象可被识别', r2 && r2.count === 1, r2 ? r2.names.join(',') : 'null');
+
+      // 裸数组（多个环境）
+      stubOpen([
+        { name: '数组环境A', variables: [{ key: 'k', value: 'v' }] },
+        { name: '数组环境B', login: { enabled: true } }
+      ]);
+      const r3 = await Importer.importEnvironmentsFromFile();
+      check('环境导入：裸数组批量导入 2 个', r3 && r3.count === 2, r3 ? r3.names.join(',') : 'null');
+
+      // 完整 _apipilot 备份包
+      stubOpen({ _apipilot: true, environments: [{ name: '包环境', variables: [] }], collections: [] });
+      const r4 = await Importer.importEnvironmentsFromFile();
+      check('环境导入：_apipilot 包内的环境可被识别', r4 && r4.count === 1, r4 ? r4.names.join(',') : 'null');
+
+      // 非法内容
+      stubOpen({ foo: 'bar' });
+      const r5 = await Importer.importEnvironmentsFromFile();
+      check('环境导入：非法内容被拒（返回 null）', r5 === null, String(r5));
+    } finally {
+      window.api.openDialog = prevOpen;
+    }
+
     /* 14. 持久化 */
     Store.save();
     await new Promise((r) => setTimeout(r, 700));

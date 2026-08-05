@@ -68,6 +68,18 @@ const Env = (() => {
           Store.save();
           reRender();
         }
+      }),
+      U.el('button', {
+        class: 'btn sm', style: 'width:100%;margin-top:6px', text: '↑ 导入环境…',
+        title: '从 JSON 文件导入环境（支持单环境 / 完整备份包 / 裸数组）',
+        onClick: async () => {
+          const res = await Importer.importEnvironmentsFromFile();
+          if (res) {
+            selectedId = Store.state.environments[Store.state.environments.length - 1].id;
+            reRender();
+            UI.toast(`已导入 ${res.count} 个环境：${res.names.join('、')}`, 'ok', 3500);
+          }
+        }
       })
     ]));
     return box;
@@ -101,6 +113,11 @@ const Env = (() => {
           onClick: () => { Store.state.activeEnvId = env.id; Store.save(); App.refreshEnvSelect(); reRender(); }
         }),
       U.el('div', { style: 'flex:1' }),
+      U.el('button', {
+        class: 'btn sm', text: '导出',
+        title: '导出该环境的变量与登录配置为 JSON 文件（不含运行时 Token）',
+        onClick: () => Importer.exportEnvironment(env)
+      }),
       U.el('button', {
         class: 'btn sm', text: '复制',
         onClick: () => {
