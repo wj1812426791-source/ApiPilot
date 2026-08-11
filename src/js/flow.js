@@ -86,33 +86,78 @@ const Flow = (() => {
 
   function showFlowMenu(flow, x, y) {
     UI.contextMenu(x, y, [
+      { label: '打开编辑', action: () => openFlow(flow.id) },
       { label: '运行', action: () => { openFlow(flow.id); runFlow(); } },
-      { label: '重命名', action: () => renameFlow(flow) },
+      { label: '改名字', action: () => renameFlow(flow) },
+      { label: '移动到…', action: () => moveToDialog(flow) },
       '-',
       { label: '删除', danger: true, action: () => deleteFlow(flow) }
     ]);
   }
 
+  // 收集所有流程文件夹，扁平化为下拉选项；excludeId 及其后代不会被列出（避免移动到自身/子文件夹）
+  function collectFolderOptions(excludeId) {
+    const opts = [];
+    (function collect(items, depth) {
+      for (const f of items || []) {
+        if (f.type === 'flowFolder') {
+          const isExcluded = f.id === excludeId;
+          if (!isExcluded) {
+            opts.push({ id: f.id, name: '　'.repeat(depth) + '📁 ' + f.name });
+            collect(f.items, depth + 1);
+          }
+        }
+      }
+    })(Store.state.flows, 0);
+    return opts;
+  }
+
+  async function moveToDialog(node) {
+    const folderOptions = collectFolderOptions(node.id);
+    const select = U.el('select', { class: 'input' }, [
+      U.el('option', { value: '', text: '（根目录）' }),
+      ...folderOptions.map((o) => U.el('option', { value: o.id, text: o.name }))
+    ]);
+    const loc = Store.findFlowParent(node.id);
+    if (loc && loc.parent && loc.parent.type === 'flowFolder') {
+      select.value = loc.parent.id;
+    }
+    const body = U.el('div', {}, [
+      U.el('label', { class: 'field' }, [
+        U.el('span', { class: 'field-label', text: '移动到上级文件夹' }), select
+      ])
+    ]);
+    UI.open({
+      title: '移动到 · ' + node.name,
+      size: 'sm',
+      body,
+      footer: U.el('div', { style: 'display:flex;gap:9px' }, [
+        U.el('button', { class: 'btn', text: '取消', onClick: () => UI.close() }),
+        U.el('button', {
+          class: 'btn primary', text: '确定',
+          onClick: () => {
+            const ok = Store.moveFlow(node.id, select.value || null);
+            UI.close();
+            if (ok) { Store.save(); renderList(); UI.toast('已移动到新位置', 'ok'); }
+            else UI.toast('移动失败（目标不合法）', 'warn');
+          }
+        })
+      ])
+    });
+  }
+
   function showFolderMenu(folder, x, y) {
     UI.contextMenu(x, y, [
       { label: '新建流程', action: () => newFlow(folder) },
-      { label: '重命名', action: () => renameFolder(folder) },
+      { label: '改名字', action: () => renameFolder(folder) },
+      { label: '移动到…', action: () => moveToDialog(folder) },
       '-',
       { label: '删除', danger: true, action: () => deleteFolder(folder) }
     ]);
   }
 
   async function newFlow(defaultFolder = null) {
-    // 收集所有流程文件夹，扁平化为下拉选项
-    const folderOptions = [];
-    (function collect(items, depth) {
-      for (const f of items || []) {
-        if (f.type === 'flowFolder') {
-          folderOptions.push({ id: f.id, name: '　'.repeat(depth) + '📁 ' + f.name });
-          collect(f.items, depth + 1);
-        }
-      }
-    })(Store.state.flows, 0);
+    const folderOptions = collectFolderOptions();
 
     const nameInput = U.el('input', { class: 'input', type: 'text', value: '新建测试流程', placeholder: '测试流程名称' });
     const folderSelect = U.el('select', { class: 'input' }, [

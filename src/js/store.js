@@ -250,6 +250,31 @@ const Store = (() => {
     return null;
   }
 
+  /** 把流程/文件夹移动到目标文件夹（targetFolderId 为空表示根目录）。不能移动到自身或自己的后代。 */
+  function moveFlow(id, targetFolderId) {
+    if (!targetFolderId) targetFolderId = null;
+    if (id === targetFolderId) return false;
+    if (targetFolderId) {
+      const target = findFlow(targetFolderId);
+      if (!target || target.type !== 'flowFolder') return false;
+      // 不能移动到自己的子树内（会产生循环引用）。只有文件夹才可能是祖先，流程无需检查。
+      const moving = findFlow(id);
+      if (moving && moving.type === 'flowFolder' && findFlow(targetFolderId, moving.items || [])) return false;
+    }
+    const loc = findFlowParent(id);
+    if (!loc) return false;
+    const [node] = loc.items.splice(loc.index, 1);
+    if (targetFolderId) {
+      const target = findFlow(targetFolderId);
+      target.items = target.items || [];
+      target.items.push(node);
+      target.expanded = true;
+    } else {
+      state.flows.push(node);
+    }
+    return true;
+  }
+
   /** 找到某个请求所属的集合 */
   function findOwnerCollection(id) {
     for (const col of state.collections) {
@@ -283,7 +308,7 @@ const Store = (() => {
     state, save, load,
     newRequest, newFolder, newCollection, newEnvironment, newFlow, newFlowFolder, newFlowStep,
     DEFAULT_LOGIN, DEFAULT_TOKEN,
-    walk, findNode, findRequest, findFlow, findFlowParent, findOwnerCollection, removeNode,
+    walk, findNode, findRequest, findFlow, findFlowParent, moveFlow, findOwnerCollection, removeNode,
     activeEnv, pushHistory
   };
 })();
