@@ -83,7 +83,12 @@ const App = (() => {
       if (!ctrl) return;
       const k = e.key.toLowerCase();
 
-      if (k === 'enter') { e.preventDefault(); Editor.send(); }
+      if (k === 'enter') {
+        e.preventDefault();
+        const flowTab = Flow && Flow.current && Flow.current();
+        if (flowTab) Flow.runFlow();
+        else Editor.send();
+      }
       else if (k === 's') { e.preventDefault(); e.shiftKey ? Editor.saveAs() : Editor.save(); }
       else if (k === 'n') { e.preventDefault(); Editor.newTab(); }
       else if (k === 'w') {
@@ -117,9 +122,11 @@ const App = (() => {
     refreshEnvSelect();
     Tree.render();
     Tree.renderHistory();
+    Flow.renderList();
     Editor.bind();
     Editor.renderTabs();
     Editor.renderCurrent();
+    Flow.bind();
     Response.bind();
     bindSplitters();
     bindShortcuts();
@@ -150,6 +157,7 @@ const App = (() => {
         U.$$('.side-tab').forEach((b) => b.classList.toggle('active', b === btn));
         U.$('#paneCollections').classList.toggle('active', btn.dataset.side === 'collections');
         U.$('#paneHistory').classList.toggle('active', btn.dataset.side === 'history');
+        U.$('#paneFlows').classList.toggle('active', btn.dataset.side === 'flows');
         Store.state.ui.sideTab = btn.dataset.side;
         Store.save();
       });
@@ -191,10 +199,11 @@ const App = (() => {
       collections: Store.state.collections,
       environments: Store.state.environments,
       globals: Store.state.globals,
+      flows: Store.state.flows,
       activeEnvId: Store.state.activeEnvId,
       history: Store.state.history.slice(0, 200),
       ui: Store.state.ui,
-      openTabs: Store.state.tabs.map((t) => ({ id: t.id, refId: t.refId, draft: t.draft, dirty: t.dirty })),
+      openTabs: Store.state.tabs.map((t) => ({ id: t.id, refId: t.refId, flowId: t.flowId, draft: t.draft, dirty: t.dirty })),
       activeTabId: Store.state.activeTabId
     };
   }

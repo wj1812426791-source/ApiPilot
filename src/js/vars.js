@@ -44,8 +44,35 @@ const Vars = (() => {
     return map;
   }
 
+  /** 按路径从流程步骤结果中提取值 */
+  function resolveStepValue(name, ctx) {
+    // 语法：$1.response.body.data.f_Id 或 $1.response.headers.xxx 或 $1.response.status
+    if (!ctx || !ctx.stepResults) return undefined;
+    const m = /^\$(\d+)(\.response(\.body|\.headers|\.status)?.*)?$/.exec(name);
+    if (!m) return undefined;
+    const idx = Number(m[1]) - 1;
+    const result = ctx.stepResults[idx];
+    if (!result) return undefined;
+    const rest = m[2] || '';
+    if (!rest) return result;
+    const res = result.response || {};
+    if (rest === '.response.status' || rest === '.response.statusCode') return String(res.status || '');
+    if (rest.startsWith('.response.headers')) {
+      const path = rest.slice('.response.headers'.length);
+      if (!path) return res.headers || {};
+      return U.getByPath(res.headers || {}, path.slice(1));
+    }
+    if (rest.startsWith('.response.body')) {
+      const path = rest.slice('.response.body'.length);
+      if (!path) return res.parsedBody !== undefined ? res.parsedBody : res.bodyText;
+      const body = res.parsedBody !== undefined ? res.parsedBody : (U.tryParseJSON(res.bodyText || '').value || {});
+      return U.getByPath(body, path.slice(1));
+    }
+    return undefined;
+  }
+
   /** 解析字符串中的变量，返回 { text, missing: [] } */
-  function resolveDetail(text, env, depth = 0) {
+  function resolveDetail(text, env, ctx, depth = 0) {
     if (typeof text !== 'string' || text.indexOf('{{') < 0) {
       return { text: text ?? '', missing: [] };
     }
@@ -53,6 +80,12 @@ const Vars = (() => {
     const missing = [];
     let out = text.replace(VAR_RE, (full, rawName) => {
       const name = rawName.trim();
+      if (name.startsWith('$')) {
+        const val = resolveStepValue(name, ctx);
+        if (val !== undefined) return String(val);
+        missing.push(name);
+        return full;
+      }
       if (map.has(name)) return map.get(name);
       const dyn = dynamic(name);
       if (dyn !== undefined) return dyn;
@@ -61,14 +94,14 @@ const Vars = (() => {
     });
     // 支持变量值里再套变量，最多 5 层
     if (depth < 5 && out !== text && out.indexOf('{{') >= 0) {
-      const next = resolveDetail(out, env, depth + 1);
+      const next = resolveDetail(out, env, ctx, depth + 1);
       out = next.text;
       for (const m of next.missing) if (!missing.includes(m)) missing.push(m);
     }
     return { text: out, missing };
   }
 
-  const resolve = (text, env) => resolveDetail(text, env).text;
+  const resolve = (text, env, ctx) => resolveDetail(text, env, ctx).text;
 
   function resolveItems(items, env) {
     return (items || [])
@@ -77,16 +110,19 @@ const Vars = (() => {
   }
 
   /** 检查一段文本里的变量是否都能解析 */
-  function check(text, env) {
-    return resolveDetail(text, env).missing;
+  function check(text, env, ctx) {
+    return resolveDetail(text, env, ctx).missing;
   }
 
   /** 生成 URL 高亮 HTML：已定义的变量绿底，未定义红底 */
-  function highlightHtml(text, env) {
+  function highlightHtml(text, env, ctx) {
     const map = scope(env);
     return U.escapeHtml(text).replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (full, name) => {
       const key = name.trim();
-      const known = map.has(key) || dynamic(key) !== undefined;
+      let known = map.has(key) || dynamic(key) !== undefined;
+      if (key.startsWith('$') && ctx && ctx.stepResults) {
+        known = resolveStepValue(key, ctx) !== undefined;
+      }
       return `<span class="${known ? 'var-ok' : 'var-bad'}">${full}</span>`;
     });
   }
@@ -109,5 +145,5 @@ const Vars = (() => {
     return rows;
   }
 
-  return { resolve, resolveDetail, resolveItems, check, highlightHtml, list, scope, VAR_RE };
+  return { resolve, resolveDetail, resolveItems, check, highlightHtml, list, scope, resolveStepValue, VAR_RE };
 })();

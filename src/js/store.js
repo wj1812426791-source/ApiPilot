@@ -64,10 +64,31 @@ const Store = (() => {
     return { id: U.uid('col'), type: 'collection', name, items: [], expanded: true, description: '' };
   }
 
+  function newFlow(name = '新建测试流程') {
+    return { id: U.uid('flow'), type: 'flow', name, steps: [] };
+  }
+
+  function newFlowStep(seed) {
+    const step = {
+      id: U.uid('step'),
+      name: seed && seed.name ? seed.name : '未命名步骤',
+      method: seed && seed.method ? seed.method : 'GET',
+      url: seed && seed.url ? seed.url : '',
+      params: U.clone(seed && seed.params) || [],
+      pathVars: U.clone(seed && seed.pathVars) || [],
+      headers: U.clone(seed && seed.headers) || [],
+      body: U.clone(seed && seed.body) || { mode: 'none', raw: '', rawType: 'application/json', formdata: [], urlencoded: [] },
+      auth: U.clone(seed && seed.auth) || { type: 'inherit', bearer: '', username: '', password: '', apiKey: '', apiValue: '', apiIn: 'header' },
+      settings: U.clone(seed && seed.settings) || { followRedirect: true, ignoreSSL: true, useCookieJar: true, timeout: 60000 }
+    };
+    return step;
+  }
+
   const state = {
     collections: [],
     environments: [],
     globals: [],
+    flows: [],
     activeEnvId: null,
     history: [],
     tabs: [],
@@ -85,11 +106,12 @@ const Store = (() => {
       collections: state.collections,
       environments: state.environments,
       globals: state.globals,
+      flows: state.flows,
       activeEnvId: state.activeEnvId,
       history: state.history.slice(0, 200),
       ui: state.ui,
       openTabs: state.tabs.map((t) => ({
-        id: t.id, refId: t.refId, draft: t.draft, dirty: t.dirty
+        id: t.id, refId: t.refId, flowId: t.flowId, draft: t.draft, dirty: t.dirty
       })),
       activeTabId: state.activeTabId
     };
@@ -123,12 +145,14 @@ const Store = (() => {
         token: { ...DEFAULT_TOKEN(), ...(e.token || {}) }
       }));
       state.globals = data.globals || [];
+      state.flows = data.flows || [];
       state.activeEnvId = data.activeEnvId || null;
       state.history = data.history || [];
       state.ui = { ...state.ui, ...(data.ui || {}) };
       state.tabs = (data.openTabs || []).map((t) => ({
         id: t.id || U.uid('tab'),
         refId: t.refId || null,
+        flowId: t.flowId || null,
         draft: t.draft,
         dirty: !!t.dirty
       }));
@@ -199,6 +223,10 @@ const Store = (() => {
     return hit && hit.node.type === 'request' ? hit.node : null;
   }
 
+  function findFlow(id) {
+    return state.flows.find((f) => f.id === id) || null;
+  }
+
   /** 找到某个请求所属的集合 */
   function findOwnerCollection(id) {
     for (const col of state.collections) {
@@ -230,9 +258,9 @@ const Store = (() => {
 
   return {
     state, save, load,
-    newRequest, newFolder, newCollection, newEnvironment,
+    newRequest, newFolder, newCollection, newEnvironment, newFlow, newFlowStep,
     DEFAULT_LOGIN, DEFAULT_TOKEN,
-    walk, findNode, findRequest, findOwnerCollection, removeNode,
+    walk, findNode, findRequest, findFlow, findOwnerCollection, removeNode,
     activeEnv, pushHistory
   };
 })();

@@ -68,6 +68,7 @@ const Editor = (() => {
     Store.save();
     renderTabs();
     renderCurrent();
+    if (Flow && Flow.renderCurrent) Flow.renderCurrent();
     Tree.render();
   }
 
@@ -86,13 +87,17 @@ const Editor = (() => {
     box.innerHTML = '';
     for (const tab of Store.state.tabs) {
       const active = tab.id === Store.state.activeTabId;
+      const isFlow = !!tab.flowId;
+      const title = isFlow ? tab.draft.name : (tab.draft.url || tab.draft.name);
       const node = U.el('div', {
         class: 'tab' + (active ? ' active' : ''),
-        title: tab.draft.url || tab.draft.name,
-        onClick: () => { Store.state.activeTabId = tab.id; Store.save(); renderTabs(); renderCurrent(); Tree.render(); },
+        title: title,
+        onClick: () => { Store.state.activeTabId = tab.id; Store.save(); renderTabs(); renderCurrent(); Flow && Flow.renderCurrent && Flow.renderCurrent(); Tree.render(); },
         onMousedown: (e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } }
       }, [
-        U.el('span', { class: 'tab-method ' + U.methodClass(tab.draft.method), text: tab.draft.method }),
+        isFlow
+          ? U.el('span', { class: 'tab-method flow-icon', text: '流程' })
+          : U.el('span', { class: 'tab-method ' + U.methodClass(tab.draft.method), text: tab.draft.method }),
         U.el('span', { class: 'tab-title', text: tab.draft.name || '未命名' }),
         tab.dirty ? U.el('span', { class: 'tab-dirty', title: '未保存' }) : null,
         U.el('button', {
@@ -217,9 +222,13 @@ const Editor = (() => {
      渲染当前请求
      ================================================================== */
   function renderCurrent() {
+    const tab = current();
+    const isFlowTab = tab && tab.flowId;
     const req = currentReq();
-    U.$('#welcome').hidden = !!req;
+    U.$('#welcome').hidden = !!(req || isFlowTab);
     U.$('#reqArea').hidden = !req;
+    U.$('#flowArea').hidden = !isFlowTab;
+    if (isFlowTab) { if (typeof Scheduler !== 'undefined') Scheduler.showLog(null); return; }
     if (!req) { if (typeof Scheduler !== 'undefined') Scheduler.showLog(null); return; }
 
     suppressSync = true;
@@ -464,6 +473,20 @@ const Editor = (() => {
   async function save() {
     const tab = current();
     if (!tab) return;
+
+    if (tab.flowId) {
+      const flow = Store.findFlow(tab.flowId);
+      if (flow) {
+        const keep = flow.id;
+        Object.assign(flow, U.clone(tab.draft), { id: keep });
+        tab.dirty = false;
+        Store.save();
+        renderTabs();
+        Flow && Flow.renderList && Flow.renderList();
+        UI.toast('已保存测试流程', 'ok', 1400);
+        return;
+      }
+    }
 
     if (tab.refId) {
       const node = Store.findRequest(tab.refId);

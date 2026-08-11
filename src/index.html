@@ -54,6 +54,7 @@
     <div class="side-tabs">
       <button class="side-tab active" data-side="collections">集合</button>
       <button class="side-tab" data-side="history">历史</button>
+      <button class="side-tab" data-side="flows">测试流程</button>
     </div>
 
     <div class="side-toolbar">
@@ -71,6 +72,13 @@
       </div>
       <div class="side-pane" id="paneHistory">
         <div class="history-list" id="historyList"></div>
+      </div>
+      <div class="side-pane" id="paneFlows">
+        <div class="flows-list" id="flowsList"></div>
+        <div class="empty-hint" id="flowsEmpty">
+          <p>还没有测试流程</p>
+          <button class="link-btn" id="btnCreateFirstFlow">新建一个测试流程</button>
+        </div>
       </div>
     </div>
 
@@ -110,6 +118,18 @@
           <li>环境里配好登录动作后，<b>Token 自动获取、过期自动重登</b></li>
           <li><b>Ctrl+Enter</b> 发送 · <b>Ctrl+S</b> 保存 · <b>Ctrl+N</b> 新建</li>
         </ul>
+      </div>
+
+      <!-- 流程编辑区 -->
+      <div class="flow-area" id="flowArea" hidden>
+        <div class="flow-head">
+          <input type="text" class="flow-title-input" id="flowTitleInput" spellcheck="false" placeholder="测试流程名称">
+          <span class="spacer"></span>
+          <button class="btn primary" id="btnRunFlow">运行流程</button>
+        </div>
+        <div class="flow-drop-hint" id="flowDropHint">从左侧集合拖拽请求到此处，组成测试步骤</div>
+        <div class="flow-steps" id="flowSteps"></div>
+        <div class="flow-result" id="flowResult"></div>
       </div>
 
       <!-- 请求编辑区 -->
@@ -301,6 +321,7 @@
 <script src="js/env.js"></script>
 <script src="js/importer.js"></script>
 <script src="js/scheduler.js"></script>
+<script src="js/flow.js"></script>
 <script src="js/selftest.js"></script>
 <script src="js/app.js"></script>
 </body>

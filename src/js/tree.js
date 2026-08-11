@@ -111,6 +111,7 @@ const Tree = (() => {
     row.addEventListener('dragstart', (e) => {
       dragSrcId = node.id;
       e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', node.id);
       e.stopPropagation();
     });
     row.addEventListener('dragover', (e) => {

@@ -274,7 +274,45 @@ const SelfTest = (() => {
     const styled = getComputedStyle(U.$('.titlebar')).backgroundColor;
     check('样式表已生效', styled && styled !== 'rgba(0, 0, 0, 0)', styled);
 
-    /* 16. 定时任务 */
+    /* 16. 测试流程 */
+    const flow = Store.newFlow('自检测试流程');
+    const step1 = Store.newFlowStep({ name: '新增项目', method: 'POST', url: '{{baseUrl}}/api/echo', body: { mode: 'raw', raw: '{"data":{"f_Id":"FLOW_001"}}', rawType: 'application/json', formdata: [], urlencoded: [] } });
+    const step2 = Store.newFlowStep({ name: '查询项目', method: 'GET', url: '{{baseUrl}}/api/echo/{{$1.response.body.data.f_Id}}' });
+    flow.steps.push(step1, step2);
+    Store.state.flows.push(flow);
+    check('测试流程：创建 2 步流程', flow.steps.length === 2);
+
+    // 验证变量解析
+    const flowCtx = {
+      stepResults: [{
+        response: {
+          status: 200,
+          bodyText: '{"code":0,"data":{"f_Id":"FLOW_001"}}',
+          parsedBody: { code: 0, data: { f_Id: 'FLOW_001' } }
+        }
+      }]
+    };
+    const resolvedUrl = Vars.resolve(step2.url, env, flowCtx);
+    check('测试流程：$1 变量解析', resolvedUrl === BASE + '/api/echo/FLOW_001', resolvedUrl);
+
+    // 验证流程运行（使用真实接口）
+    const flowR = await Flow.runFlow(flow);
+    check('测试流程：运行完成无异常', flowR === undefined); // runFlow 无异常返回 undefined
+
+    // 验证运行结果缓存可被魔棒使用
+    const cached = FlowRuntime && FlowRuntime.getStepResult && FlowRuntime.getStepResult(step1.id);
+    check('测试流程：运行结果已缓存', cached && cached.response && cached.response.parsedBody && cached.response.parsedBody.data && cached.response.parsedBody.data.f_Id === 'FLOW_001');
+
+    // 验证界面元素
+    Flow.renderList();
+    check('测试流程：列表渲染出流程项', U.$$('#flowsList .flow-item').length >= 1);
+    Flow.openFlow(flow.id);
+    check('测试流程：打开流程后标签页存在', Store.state.tabs.some((t) => t.flowId === flow.id));
+    Flow.renderCurrent();
+    check('测试流程：流程编辑器区域可见', !U.$('#flowArea').hidden);
+    check('测试流程：步骤卡片渲染', U.$$('#flowSteps .flow-step').length === 2);
+
+    /* 17. 定时任务 */
     const schedReq = Store.newRequest('定时测试请求');
     Store.state.collections[0].items.push(schedReq);   // 挂到集合，模拟真实场景
     check('定时任务：无配置时 isActive 为 false', Scheduler.isActive(schedReq) === false);
