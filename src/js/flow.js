@@ -48,6 +48,7 @@ const Flow = (() => {
         ]);
         folderHead.addEventListener('contextmenu', (e) => {
           e.preventDefault();
+          e.stopPropagation();
           showFolderMenu(f, e.clientX, e.clientY);
         });
         wrap.appendChild(folderHead);
@@ -77,6 +78,7 @@ const Flow = (() => {
         ]);
         item.addEventListener('contextmenu', (e) => {
           e.preventDefault();
+          e.stopPropagation();
           showFlowMenu(f, e.clientX, e.clientY);
         });
         parent.appendChild(item);
