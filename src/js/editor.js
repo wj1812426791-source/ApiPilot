@@ -88,7 +88,7 @@ const Editor = (() => {
     for (const tab of Store.state.tabs) {
       const active = tab.id === Store.state.activeTabId;
       const isFlow = !!tab.flowId;
-      const title = isFlow ? tab.draft.name : (tab.draft.url || tab.draft.name);
+      const title = isFlow ? tab.draft.name : (tab.draft.name || tab.draft.url || '未命名请求');
       const node = U.el('div', {
         class: 'tab' + (active ? ' active' : ''),
         title: title,

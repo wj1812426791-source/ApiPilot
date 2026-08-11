@@ -351,12 +351,21 @@ input, select, textarea { outline: none; }
   margin-bottom: 10px; overflow: hidden;
 }
 .flow-step.expanded { border-color: var(--orange-border); box-shadow: 0 2px 8px rgba(255,108,55,.08); }
-.flow-step.dragging { opacity: .5; }
-.flow-step.drag-over { box-shadow: inset 0 0 0 2px var(--orange); }
 .flow-step-head {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 10px; background: var(--bg-soft); cursor: pointer;
 }
+.flow-step-sort {
+  display: inline-flex; flex-direction: column; gap: 1px; margin-right: 4px;
+}
+.flow-sort-btn {
+  width: 16px; height: 11px; padding: 0; line-height: 1;
+  font-size: 10px; color: var(--text-3); border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+}
+.flow-sort-btn:hover:not(.disabled) { background: var(--hover); color: var(--orange); }
+.flow-sort-btn.disabled { opacity: .25; cursor: not-allowed; }
 .flow-step-num {
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--orange); color: #fff; font-size: 11px; font-weight: 700;
@@ -402,6 +411,15 @@ input, select, textarea { outline: none; }
 .flow-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-item-count { font-size: 11px; color: var(--text-3); }
 .flow-item.active .flow-item-count { color: var(--orange-dark); }
+.flow-folder-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 12px; cursor: pointer; color: var(--text-2); font-weight: 600;
+}
+.flow-folder-head:hover { background: var(--hover); }
+.flow-folder-caret { display: inline-flex; color: var(--text-3); transition: transform .15s; }
+.flow-folder-caret.open { transform: rotate(90deg); }
+.flow-folder-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-folder-empty { padding: 4px 0 4px 40px; font-size: 11.5px; color: #a8a8aa; }
 
 /* 魔棒输入 */
 .magic-input-wrap { display: flex; align-items: center; gap: 6px; flex: 1; }
@@ -422,10 +440,15 @@ input, select, textarea { outline: none; }
 
 /* JSON 浏览树 */
 .json-browser-tree { font-family: var(--mono); font-size: 12.5px; }
-.json-tree-row { padding: 4px 6px; cursor: pointer; border-radius: 4px; }
+.json-tree-row { padding: 4px 6px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; }
 .json-tree-row:hover { background: var(--hover); }
 .json-tree-key { color: var(--text-2); font-weight: 600; }
 .json-tree-val { color: var(--text-3); }
+.json-tree-toggle { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-right: 5px; cursor: pointer; color: var(--text-3); flex: none; }
+.json-tree-toggle svg { transition: transform .15s ease; }
+.json-tree-toggle.expanded svg { transform: rotate(90deg); }
+.json-tree-toggle.leaf { visibility: hidden; cursor: default; }
+.json-tree-children.hidden { display: none; }
 
 /* ============================ 欢迎页 ============================ */
 .welcome {

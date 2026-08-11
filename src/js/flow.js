@@ -1,6 +1,6 @@
 /* =========================================================================
    flow.js - 测试流程（Apifox 风格）
-   - 左侧「测试流程」标签页：新建/打开/重命名/删除/运行流程
+   - 左侧「测试流程」标签页：新建/重命名/删除/运行流程，支持文件夹集合
    - 流程编辑器：垂直步骤列表，支持从集合树拖拽请求加入
    - 魔棒：在任意输入框右侧读取前置步骤运行结果（response.body/headers/status）
    - 运行：依次执行步骤，自动用 {{$1.response.body.data.f_Id}} 等表达式传递数据
@@ -9,6 +9,8 @@ const Flow = (() => {
 
   let currentFlowId = null;
   let currentStepId = null;
+
+  const caretSvg = '<svg viewBox="0 0 12 12" width="10" height="10"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   /* ------------------------------------------------------------------
      列表
@@ -19,52 +21,110 @@ const Flow = (() => {
     if (!box) return;
     box.innerHTML = '';
     const flows = Store.state.flows || [];
-    empty.hidden = flows.length > 0;
+    const hasAny = flows.length > 0;
+    empty.hidden = hasAny;
 
     // 新建按钮
     const head = U.el('div', { class: 'flows-head' }, [
-      U.el('button', {
-        class: 'btn primary sm', text: '+ 新建测试流程',
-        onClick: () => newFlow()
-      })
+      U.el('button', { class: 'btn primary sm', text: '+ 流程', onClick: () => newFlow() }),
+      U.el('button', { class: 'btn sm', text: '+ 文件夹', onClick: () => newFlowFolder() })
     ]);
     box.appendChild(head);
 
-    for (const flow of flows) {
-      const isOpen = currentFlowId === flow.id;
-      const item = U.el('div', {
-        class: 'flow-item' + (isOpen ? ' active' : ''),
-        title: flow.name,
-        onClick: () => openFlow(flow.id)
-      }, [
-        U.el('span', { class: 'flow-item-name', text: flow.name }),
-        U.el('span', { class: 'flow-item-count', text: `${(flow.steps || []).length} 步` })
-      ]);
-      item.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        showFlowMenu(flow, e.clientX, e.clientY);
-      });
-      box.appendChild(item);
+    renderFlowItems(flows, box, 0);
+  }
+
+  function renderFlowItems(items, parent, depth) {
+    for (const f of items || []) {
+      if (f.type === 'flowFolder') {
+        const wrap = U.el('div', { class: 'flow-folder' });
+        const folderHead = U.el('div', {
+          class: 'flow-folder-head',
+          style: `padding-left:${8 + depth * 13}px`,
+          onClick: () => { f.expanded = !f.expanded; Store.save(); renderList(); }
+        }, [
+          U.el('span', { class: 'flow-folder-caret' + (f.expanded ? ' open' : ''), html: caretSvg }),
+          U.el('span', { class: 'flow-folder-name', text: f.name })
+        ]);
+        folderHead.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          showFolderMenu(f, e.clientX, e.clientY);
+        });
+        wrap.appendChild(folderHead);
+        if (f.expanded) {
+          const kids = U.el('div', { class: 'flow-folder-children' });
+          renderFlowItems(f.items, kids, depth + 1);
+          if (!f.items || !f.items.length) {
+            kids.appendChild(U.el('div', {
+              class: 'flow-folder-empty',
+              style: `padding-left:${8 + (depth + 1) * 13 + 19}px`,
+              text: '空'
+            }));
+          }
+          wrap.appendChild(kids);
+        }
+        parent.appendChild(wrap);
+      } else {
+        const isOpen = currentFlowId === f.id;
+        const item = U.el('div', {
+          class: 'flow-item' + (isOpen ? ' active' : ''),
+          style: `padding-left:${8 + depth * 13}px`,
+          title: f.name,
+          onClick: () => openFlow(f.id)
+        }, [
+          U.el('span', { class: 'flow-item-name', text: f.name }),
+          U.el('span', { class: 'flow-item-count', text: `${(f.steps || []).length} 步` })
+        ]);
+        item.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          showFlowMenu(f, e.clientX, e.clientY);
+        });
+        parent.appendChild(item);
+      }
     }
   }
 
   function showFlowMenu(flow, x, y) {
     UI.contextMenu(x, y, [
-      { label: '运行', action: () => { openFlow(flow.id); runFlow(flow); } },
+      { label: '运行', action: () => { openFlow(flow.id); runFlow(); } },
       { label: '重命名', action: () => renameFlow(flow) },
       '-',
       { label: '删除', danger: true, action: () => deleteFlow(flow) }
     ]);
   }
 
-  async function newFlow() {
+  function showFolderMenu(folder, x, y) {
+    UI.contextMenu(x, y, [
+      { label: '新建流程', action: () => newFlow(folder) },
+      { label: '重命名', action: () => renameFolder(folder) },
+      '-',
+      { label: '删除', danger: true, action: () => deleteFolder(folder) }
+    ]);
+  }
+
+  async function newFlow(targetFolder = null) {
     const name = await UI.prompt('测试流程名称', '新建测试流程', { title: '新建测试流程' });
     if (!name) return;
     const flow = Store.newFlow(name);
-    Store.state.flows.push(flow);
+    if (targetFolder && targetFolder.type === 'flowFolder') {
+      targetFolder.items = targetFolder.items || [];
+      targetFolder.items.push(flow);
+      targetFolder.expanded = true;
+    } else {
+      Store.state.flows.push(flow);
+    }
     Store.save();
     renderList();
     openFlow(flow.id);
+  }
+
+  async function newFlowFolder() {
+    const name = await UI.prompt('流程文件夹名称', '新建流程文件夹', { title: '新建流程文件夹' });
+    if (!name) return;
+    const folder = Store.newFlowFolder(name);
+    Store.state.flows.push(folder);
+    Store.save();
+    renderList();
   }
 
   async function renameFlow(flow) {
@@ -77,14 +137,52 @@ const Flow = (() => {
     if (currentFlowId === flow.id) U.$('#flowTitleInput').value = flow.name;
   }
 
+  async function renameFolder(folder) {
+    const name = await UI.prompt('流程文件夹名称', folder.name, { title: '重命名流程文件夹' });
+    if (!name) return;
+    folder.name = name;
+    Store.save();
+    renderList();
+  }
+
   async function deleteFlow(flow) {
     const ok = await UI.confirm(`确定删除测试流程「${flow.name}」吗？`, { title: '删除测试流程', okText: '删除', danger: true });
     if (!ok) return;
-    const idx = Store.state.flows.findIndex((f) => f.id === flow.id);
-    if (idx >= 0) Store.state.flows.splice(idx, 1);
+    const parent = Store.findFlowParent(flow.id);
+    if (parent) parent.items.splice(parent.index, 1);
     closeFlowTab(flow.id);
     Store.save();
     renderList();
+  }
+
+  async function deleteFolder(folder) {
+    const count = countFlowsInFolder(folder);
+    const extra = count ? `\n文件夹内的 ${count} 个测试流程会被一起删除。` : '';
+    const ok = await UI.confirm(`确定删除流程文件夹「${folder.name}」吗？${extra}`, { title: '删除流程文件夹', okText: '删除', danger: true });
+    if (!ok) return;
+    const parent = Store.findFlowParent(folder.id);
+    if (parent) parent.items.splice(parent.index, 1);
+    collectFlowIds(folder).forEach(closeFlowTab);
+    Store.save();
+    renderList();
+  }
+
+  function countFlowsInFolder(folder) {
+    let n = 0;
+    for (const f of folder.items || []) {
+      if (f.type === 'flowFolder') n += countFlowsInFolder(f);
+      else n++;
+    }
+    return n;
+  }
+
+  function collectFlowIds(folder) {
+    const ids = [];
+    for (const f of folder.items || []) {
+      if (f.type === 'flowFolder') ids.push(...collectFlowIds(f));
+      else ids.push(f.id);
+    }
+    return ids;
   }
 
   /* ------------------------------------------------------------------
@@ -157,13 +255,27 @@ const Flow = (() => {
 
   function renderStepCard(flow, step, index) {
     const expanded = currentStepId === step.id;
+    const steps = flow.steps || [];
     const card = U.el('div', {
       class: 'flow-step' + (expanded ? ' expanded' : ''),
-      dataset: { id: step.id, index: String(index) },
-      draggable: 'true'
+      dataset: { id: step.id, index: String(index) }
     });
 
     const head = U.el('div', { class: 'flow-step-head' }, [
+      U.el('div', { class: 'flow-step-sort' }, [
+        U.el('button', {
+          class: 'flow-sort-btn' + (index === 0 ? ' disabled' : ''),
+          text: '↑', title: '上移',
+          disabled: index === 0,
+          onClick: (e) => { e.stopPropagation(); moveStep(flow, index, -1); }
+        }),
+        U.el('button', {
+          class: 'flow-sort-btn' + (index === steps.length - 1 ? ' disabled' : ''),
+          text: '↓', title: '下移',
+          disabled: index === steps.length - 1,
+          onClick: (e) => { e.stopPropagation(); moveStep(flow, index, 1); }
+        })
+      ]),
       U.el('span', { class: 'flow-step-num', text: String(index + 1) }),
       U.el('span', { class: 'node-method ' + U.methodClass(step.method), text: step.method }),
       U.el('span', { class: 'flow-step-name', text: step.name || '未命名步骤', title: step.url }),
@@ -183,45 +295,16 @@ const Flow = (() => {
       card.appendChild(renderStepDetail(flow, step, index));
     }
 
-    // 拖拽排序
-    card.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', step.id);
-      e.dataTransfer.effectAllowed = 'move';
-      card.classList.add('dragging');
-    });
-    card.addEventListener('dragend', () => card.classList.remove('dragging'));
-    card.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      card.classList.add('drag-over');
-    });
-    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-    card.addEventListener('drop', (e) => handleStepDrop(e, flow, step, index));
-
     return card;
   }
 
-  function handleStepDrop(e, flow, targetStep, targetIndex) {
-    e.preventDefault();
-    const srcId = e.dataTransfer.getData('text/plain');
-    if (!srcId) return;
-
-    // 集合树拖拽请求
-    const req = Store.findRequest(srcId);
-    if (req) {
-      const newStep = Store.newFlowStep(req);
-      flow.steps.splice(targetIndex + 1, 0, newStep);
-      markDirty();
-      renderSteps(flow);
-      UI.toast('已添加步骤：' + newStep.name, 'ok');
-      return;
-    }
-
-    // 步骤排序
-    const srcIdx = flow.steps.findIndex((s) => s.id === srcId);
-    if (srcIdx < 0 || srcIdx === targetIndex) return;
-    const [moved] = flow.steps.splice(srcIdx, 1);
-    const insertIndex = srcIdx < targetIndex ? targetIndex : targetIndex + 1;
-    flow.steps.splice(insertIndex, 0, moved);
+  function moveStep(flow, index, dir) {
+    const steps = flow.steps;
+    const newIndex = index + dir;
+    if (newIndex < 0 || newIndex >= steps.length) return;
+    const [moved] = steps.splice(index, 1);
+    steps.splice(newIndex, 0, moved);
+    if (currentStepId === moved.id) { /* 保持展开状态 */ }
     markDirty();
     renderSteps(flow);
   }
@@ -609,6 +692,8 @@ const Flow = (() => {
     }
   }
 
+  const treeToggleSvg = '<svg viewBox="0 0 12 12" width="10" height="10"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
   function renderJsonTree(container, body, pathInput, previewBox) {
     container.innerHTML = '';
 
@@ -616,6 +701,21 @@ const Flow = (() => {
       const row = U.el('div', { class: 'json-tree-row', style: `padding-left:${depth * 16}px` });
       if (value && typeof value === 'object') {
         const isArray = Array.isArray(value);
+        const kids = U.el('div', { class: 'json-tree-children' });
+        let expanded = true;
+
+        const toggle = U.el('span', {
+          class: 'json-tree-toggle expanded',
+          html: treeToggleSvg
+        });
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          expanded = !expanded;
+          kids.hidden = !expanded;
+          toggle.classList.toggle('expanded', expanded);
+        });
+
+        row.appendChild(toggle);
         row.appendChild(U.el('span', { class: 'json-tree-key', text: `${key}: ` + (isArray ? `[${value.length}]` : '{...}') }));
         row.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -623,16 +723,18 @@ const Flow = (() => {
           pathInput.dispatchEvent(new Event('input'));
           if (previewBox) previewBox.textContent = JSON.stringify(value);
         });
-        const kids = U.el('div', { class: 'json-tree-children' });
+
         for (const [k, v] of Object.entries(value)) {
           const childPath = path ? path + '.' + k : k;
           kids.appendChild(renderNode(k, v, childPath, depth + 1));
         }
+
         const wrap = U.el('div', {});
         wrap.appendChild(row);
         wrap.appendChild(kids);
         return wrap;
       } else {
+        row.appendChild(U.el('span', { class: 'json-tree-toggle leaf', html: treeToggleSvg }));
         row.appendChild(U.el('span', { class: 'json-tree-key', text: key + ': ' }));
         row.appendChild(U.el('span', { class: 'json-tree-val', text: JSON.stringify(value) }));
         row.addEventListener('click', (e) => {

@@ -68,6 +68,10 @@ const Store = (() => {
     return { id: U.uid('flow'), type: 'flow', name, steps: [] };
   }
 
+  function newFlowFolder(name = '新建流程文件夹') {
+    return { id: U.uid('flowf'), type: 'flowFolder', name, expanded: true, items: [] };
+  }
+
   function newFlowStep(seed) {
     const step = {
       id: U.uid('step'),
@@ -223,8 +227,27 @@ const Store = (() => {
     return hit && hit.node.type === 'request' ? hit.node : null;
   }
 
-  function findFlow(id) {
-    return state.flows.find((f) => f.id === id) || null;
+  function findFlow(id, items = state.flows) {
+    for (const f of items || []) {
+      if (f.id === id) return f;
+      if (f.type === 'flowFolder') {
+        const hit = findFlow(id, f.items);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  function findFlowParent(id, items = state.flows, parent = null) {
+    for (let i = 0; i < (items || []).length; i++) {
+      const f = items[i];
+      if (f.id === id) return { parent, items, index: i };
+      if (f.type === 'flowFolder') {
+        const hit = findFlowParent(id, f.items, f);
+        if (hit) return hit;
+      }
+    }
+    return null;
   }
 
   /** 找到某个请求所属的集合 */
@@ -258,9 +281,9 @@ const Store = (() => {
 
   return {
     state, save, load,
-    newRequest, newFolder, newCollection, newEnvironment, newFlow, newFlowStep,
+    newRequest, newFolder, newCollection, newEnvironment, newFlow, newFlowFolder, newFlowStep,
     DEFAULT_LOGIN, DEFAULT_TOKEN,
-    walk, findNode, findRequest, findFlow, findOwnerCollection, removeNode,
+    walk, findNode, findRequest, findFlow, findFlowParent, findOwnerCollection, removeNode,
     activeEnv, pushHistory
   };
 })();

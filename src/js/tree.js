@@ -67,7 +67,7 @@ const Tree = (() => {
       row.appendChild(U.el('span', { html: folderSvg }));
     }
 
-    row.appendChild(U.el('span', { class: 'node-name', text: node.name, title: node.url || node.name }));
+    row.appendChild(U.el('span', { class: 'node-name', text: node.name || node.url || '未命名请求', title: node.url || node.name }));
 
     // 定时任务徽标
     if (isLeaf && node.schedule && node.schedule.enabled) {
