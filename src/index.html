@@ -134,6 +134,9 @@
 
       <!-- 请求编辑区 -->
       <div class="req-area" id="reqArea" hidden>
+        <div class="req-name-row">
+          <input type="text" class="req-name-input" id="reqName" placeholder="请求名称（保存后显示在左侧集合里）" spellcheck="false">
+        </div>
         <div class="url-bar">
           <div class="method-wrap">
             <select class="method-select" id="methodSelect">
@@ -146,6 +149,7 @@
             <div class="url-highlight" id="urlHighlight"></div>
             <input type="text" class="url-input" id="urlInput" spellcheck="false"
                    placeholder="输入请求 URL，例如 {{baseUrl}}/api/user/list">
+            <div class="url-suggest" id="urlSuggest" hidden></div>
           </div>
           <button class="btn primary send-btn" id="btnSend">发送</button>
           <button class="btn save-btn" id="btnSave" title="保存 (Ctrl+S)">保存</button>

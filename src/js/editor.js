@@ -234,6 +234,7 @@ const Editor = (() => {
     suppressSync = true;
     U.$('#methodSelect').value = req.method || 'GET';
     U.$('#urlInput').value = req.url || '';
+    U.$('#reqName').value = req.name || '';
     syncUrlHighlight();
     suppressSync = false;
 
@@ -293,6 +294,81 @@ const Editor = (() => {
     updateCounts();
     syncUrlHighlight();
     markDirty();
+  }
+
+  /* --------------------------- URL 变量补全 --------------------------- */
+  const suggestState = { open: false, items: [], tokenStart: -1, activeIdx: 0 };
+
+  function updateUrlSuggest() {
+    const input = U.$('#urlInput');
+    const box = U.$('#urlSuggest');
+    if (!input || !box) return;
+    const pos = input.selectionStart;
+    const before = input.value.slice(0, pos);
+    const m = /\{\{([^{}]*)$/.exec(before);
+    if (!m) { closeUrlSuggest(); return; }
+    const filter = m[1].toLowerCase();
+    const vars = Vars.list(Store.activeEnv()).filter((v) => v.enabled !== false && v.key.toLowerCase().includes(filter));
+    if (!vars.length) { closeUrlSuggest(); return; }
+    suggestState.open = true;
+    suggestState.items = vars;
+    suggestState.tokenStart = m.index;
+    suggestState.activeIdx = 0;
+    renderUrlSuggest(box, vars);
+  }
+
+  function renderUrlSuggest(box, vars) {
+    box.innerHTML = '';
+    box.hidden = false;
+    vars.forEach((v, i) => {
+      const item = U.el('div', { class: 'url-suggest-item' + (i === 0 ? ' active' : '') }, [
+        U.el('span', { class: 'us-scope', text: v.scope }),
+        U.el('span', { class: 'us-key', text: v.key }),
+        U.el('span', { class: 'us-val', text: String(v.value != null ? v.value : '') })
+      ]);
+      item.addEventListener('mousedown', (e) => { e.preventDefault(); });
+      item.addEventListener('mouseenter', () => { suggestState.activeIdx = i; highlightSuggest(box); });
+      item.addEventListener('click', () => chooseUrlSuggest(i));
+      box.appendChild(item);
+    });
+  }
+
+  function highlightSuggest(box) {
+    Array.prototype.forEach.call(box.children, (c, i) => c.classList.toggle('active', i === suggestState.activeIdx));
+  }
+
+  function closeUrlSuggest() {
+    const box = U.$('#urlSuggest');
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+    suggestState.open = false;
+    suggestState.items = [];
+    suggestState.tokenStart = -1;
+    suggestState.activeIdx = 0;
+  }
+
+  function chooseUrlSuggest(i) {
+    const v = suggestState.items[i];
+    if (!v) { closeUrlSuggest(); return; }
+    const input = U.$('#urlInput');
+    const pos = input.selectionStart;
+    const before = input.value.slice(0, suggestState.tokenStart);
+    const after = input.value.slice(pos);
+    const insert = '{{' + v.key + '}}';
+    input.value = before + insert + after;
+    const caret = (before + insert).length;
+    input.setSelectionRange(caret, caret);
+    closeUrlSuggest();
+    input.dispatchEvent(new Event('input'));
+  }
+
+  function onUrlKeydown(e) {
+    if (suggestState.open && suggestState.items.length) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); suggestState.activeIdx = (suggestState.activeIdx + 1) % suggestState.items.length; highlightSuggest(U.$('#urlSuggest')); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); suggestState.activeIdx = (suggestState.activeIdx - 1 + suggestState.items.length) % suggestState.items.length; highlightSuggest(U.$('#urlSuggest')); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); chooseUrlSuggest(suggestState.activeIdx); return; }
+      if (e.key === 'Escape') { e.preventDefault(); closeUrlSuggest(); return; }
+    }
+    if (e.key === 'Enter') { e.preventDefault(); send(); }
   }
 
   function syncParamsToUrl() {
@@ -636,10 +712,17 @@ const Editor = (() => {
     });
 
     const urlInput = U.$('#urlInput');
-    urlInput.addEventListener('input', onUrlInput);
+    urlInput.addEventListener('input', () => { onUrlInput(); updateUrlSuggest(); });
     urlInput.addEventListener('scroll', () => { U.$('#urlHighlight').scrollLeft = urlInput.scrollLeft; });
-    urlInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); send(); }
+    urlInput.addEventListener('keydown', onUrlKeydown);
+    urlInput.addEventListener('blur', () => { setTimeout(closeUrlSuggest, 150); });
+
+    U.$('#reqName').addEventListener('input', (e) => {
+      const req = currentReq();
+      if (!req) return;
+      req.name = e.target.value;
+      markDirty();
+      renderTabs();
     });
 
     U.$('#btnSend').addEventListener('click', send);

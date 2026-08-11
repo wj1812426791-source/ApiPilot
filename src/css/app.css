@@ -803,6 +803,29 @@ pre.code.nowrap { white-space: pre; }
   border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
   animation: spin .7s linear infinite; vertical-align: -2px;
 }
+/* 请求名称输入 */
+.req-name-row { padding: 8px 14px 0; }
+.req-name-input {
+  width: 100%; height: 30px; padding: 0 11px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; color: var(--text); background: var(--bg-2);
+  box-sizing: border-box;
+}
+.req-name-input:focus { border-color: var(--orange); outline: none; }
+
+/* URL 变量补全下拉 */
+.url-suggest {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+  margin-top: 4px; max-height: 240px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,.14);
+}
+.url-suggest-item { display: flex; align-items: center; gap: 8px; padding: 7px 11px; font-size: 12.5px; cursor: pointer; }
+.url-suggest-item.active, .url-suggest-item:hover { background: var(--hover); }
+.us-scope { flex: none; font-size: 10.5px; color: #fff; background: var(--text-3); padding: 1px 6px; border-radius: 10px; }
+.us-key { font-family: var(--mono); font-weight: 700; color: var(--orange-dark); }
+.us-val { flex: 1; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-family: var(--mono); font-size: 11.5px; }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ============================ 流程 KV 单/多选 ============================ */

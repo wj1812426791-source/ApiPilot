@@ -238,6 +238,8 @@ const Tree = (() => {
     const name = await UI.prompt('名称', node.name, { title: '重命名' });
     if (!name) return;
     node.name = name;
+    // 同步到已打开的标签页草稿，避免后续保存时旧名字覆盖新名字
+    Store.state.tabs.forEach((t) => { if (t.refId === node.id) t.draft.name = name; });
     Store.save();
     render();
     Editor.renderTabs();
