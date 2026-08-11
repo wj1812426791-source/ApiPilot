@@ -216,11 +216,20 @@ const U = (() => {
     return 'm-' + String(m || 'get').toLowerCase();
   }
 
+  /** 笛卡尔积：groups 为二维数组，返回所有组合（每组取一个元素） */
+  function cartesian(groups) {
+    return groups.reduce((acc, group) => {
+      const next = [];
+      for (const a of acc) for (const v of group) next.push(a.concat(v));
+      return next;
+    }, [[]]);
+  }
+
   return {
     $, $$, el, uid, clone, debounce, escapeHtml,
     getByPath, findDeep,
     fmtBytes, fmtTime, fmtDateTime, fmtRelative,
     tryParseJSON, highlightJSON, formatXML,
-    copy, splitUrl, parseQuery, buildQuery, methodClass
+    copy, splitUrl, parseQuery, buildQuery, methodClass, cartesian
   };
 })();

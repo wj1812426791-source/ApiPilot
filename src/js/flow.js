@@ -102,20 +102,66 @@ const Flow = (() => {
     ]);
   }
 
-  async function newFlow(targetFolder = null) {
-    const name = await UI.prompt('测试流程名称', '新建测试流程', { title: '新建测试流程' });
-    if (!name) return;
-    const flow = Store.newFlow(name);
-    if (targetFolder && targetFolder.type === 'flowFolder') {
-      targetFolder.items = targetFolder.items || [];
-      targetFolder.items.push(flow);
-      targetFolder.expanded = true;
-    } else {
-      Store.state.flows.push(flow);
-    }
-    Store.save();
-    renderList();
-    openFlow(flow.id);
+  async function newFlow(defaultFolder = null) {
+    // 收集所有流程文件夹，扁平化为下拉选项
+    const folderOptions = [];
+    (function collect(items, depth) {
+      for (const f of items || []) {
+        if (f.type === 'flowFolder') {
+          folderOptions.push({ id: f.id, name: '　'.repeat(depth) + '📁 ' + f.name });
+          collect(f.items, depth + 1);
+        }
+      }
+    })(Store.state.flows, 0);
+
+    const nameInput = U.el('input', { class: 'input', type: 'text', value: '新建测试流程', placeholder: '测试流程名称' });
+    const folderSelect = U.el('select', { class: 'input' }, [
+      U.el('option', { value: '', text: '（根目录）' }),
+      ...folderOptions.map((o) => U.el('option', { value: o.id, text: o.name }))
+    ]);
+    if (defaultFolder && defaultFolder.type === 'flowFolder') folderSelect.value = defaultFolder.id;
+
+    const body = U.el('div', {}, [
+      U.el('label', { class: 'field' }, [U.el('span', { class: 'field-label', text: '名称' }), nameInput]),
+      U.el('label', { class: 'field' }, [U.el('span', { class: 'field-label', text: '放入文件夹' }), folderSelect])
+    ]);
+
+    const submit = () => {
+      const name = nameInput.value.trim();
+      if (!name) { UI.toast('请输入流程名称', 'warn'); return; }
+      const flow = Store.newFlow(name);
+      const fid = folderSelect.value;
+      if (fid) {
+        const folder = Store.findFlow(fid);
+        if (folder && folder.type === 'flowFolder') {
+          folder.items = folder.items || [];
+          folder.items.push(flow);
+          folder.expanded = true;
+        } else {
+          Store.state.flows.push(flow);
+        }
+      } else {
+        Store.state.flows.push(flow);
+      }
+      UI.close();
+      Store.save();
+      renderList();
+      openFlow(flow.id);
+    };
+
+    UI.open({
+      title: '新建测试流程',
+      size: 'sm',
+      body,
+      footer: U.el('div', { style: 'display:flex;gap:9px' }, [
+        U.el('button', { class: 'btn', text: '取消', onClick: () => UI.close() }),
+        U.el('button', { class: 'btn primary', text: '创建', onClick: submit })
+      ]),
+      onMount: () => {
+        setTimeout(() => { nameInput.focus(); nameInput.select(); }, 30);
+        nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+      }
+    });
   }
 
   async function newFlowFolder() {
@@ -458,92 +504,139 @@ const Flow = (() => {
   }
 
   function renderMagicKV(flow, currentStepIndex, list, opts, onChange) {
-    const container = U.el('div', { class: 'kv-table' });
+    const container = U.el('div', { class: 'kv-groups' });
     const o = Object.assign({ desc: true, fileType: false, kPlaceholder: '键', vPlaceholder: '值' }, opts || {});
+
+    const commit = () => { onChange(list); markDirty(); };
+
+    function ensureShape(item) {
+      if (item.value === undefined) item.value = '';
+      if (item.enabled === undefined) item.enabled = true;
+      if (item.multi === undefined) item.multi = false;
+      if (!Array.isArray(item.candidates)) item.candidates = [];
+      if (item.type === undefined) item.type = 'text';
+      if (item.desc === undefined) item.desc = '';
+    }
+
+    function buildGroup(item, index, isPlaceholder) {
+      ensureShape(item);
+      const group = U.el('div', { class: 'kv-group' + (item.multi ? ' multi' : '') });
+
+      /* ---- 头部：启用 / 键 / 单多选 / 说明 / 类型 / 删除 ---- */
+      const head = U.el('div', { class: 'kv-group-head' });
+
+      const chk = U.el('input', { type: 'checkbox' });
+      chk.checked = item.enabled !== false;
+      chk.disabled = isPlaceholder;
+      chk.addEventListener('change', () => { if (isPlaceholder) return; item.enabled = chk.checked; commit(); });
+      head.appendChild(U.el('div', { class: 'kv-check' }, [chk]));
+
+      const keyInput = U.el('input', { type: 'text', class: 'kv-k-input input', value: item.key ?? '', placeholder: o.kPlaceholder, spellcheck: 'false' });
+      const pushPlaceholder = () => { if (isPlaceholder) { list.push(item); return true; } return false; };
+      keyInput.addEventListener('input', () => {
+        item.key = keyInput.value;
+        if (pushPlaceholder()) { commit(); render(); } else commit();
+      });
+      head.appendChild(keyInput);
+
+      const fileType = o.fileType;
+      const isFile = fileType && item.type === 'file';
+
+      const toggle = U.el('div', { class: 'kv-mode-toggle' }, [
+        U.el('button', {
+          class: 'kv-mode-btn' + (!item.multi ? ' active' : ''), text: '◉ 单一',
+          title: '单个值', disabled: isFile,
+          onClick: () => { item.multi = false; commit(); render(); }
+        }),
+        U.el('button', {
+          class: 'kv-mode-btn' + (item.multi ? ' active' : ''), text: '☑ 多选',
+          title: '多个候选值，运行时逐个执行', disabled: isFile,
+          onClick: () => {
+            item.multi = true;
+            if (!item.candidates.length) item.candidates.push({ value: item.value || '', checked: true });
+            commit(); render();
+          }
+        })
+      ]);
+      head.appendChild(toggle);
+
+      if (o.desc) {
+        const descInput = U.el('input', { type: 'text', class: 'kv-d-input input', value: item.desc || '', placeholder: '说明' });
+        descInput.addEventListener('input', () => { item.desc = descInput.value; if (pushPlaceholder()) { commit(); render(); } else commit(); });
+        head.appendChild(descInput);
+      }
+
+      if (fileType) {
+        const tSel = U.el('select', { class: 'kv-type-select' }, [
+          U.el('option', { value: 'text', text: 'Text' }),
+          U.el('option', { value: 'file', text: 'File' })
+        ]);
+        tSel.value = item.type || 'text';
+        tSel.addEventListener('change', () => { item.type = tSel.value; commit(); render(); });
+        head.appendChild(tSel);
+      }
+
+      head.appendChild(U.el('button', {
+        class: 'kv-del', text: '×', title: '删除',
+        onClick: () => { if (isPlaceholder) return; list.splice(index, 1); commit(); render(); }
+      }));
+
+      group.appendChild(head);
+
+      /* ---- 主体：单值 / 多候选值 ---- */
+      const bodyEl = U.el('div', { class: 'kv-group-body' });
+      if (!item.multi) {
+        if (isFile) {
+          bodyEl.appendChild(U.el('div', { class: 'kv-single' }, [
+            U.el('span', {
+              style: 'flex:1;padding:0 4px;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5c5c5c',
+              text: item.src || '未选择文件', title: item.src || ''
+            }),
+            U.el('button', {
+              class: 'kv-file-btn', text: '选择文件',
+              onClick: async () => {
+                const r = await window.api.openDialog({ properties: ['openFile'] });
+                if (r.ok) { item.src = r.path; commit(); render(); }
+              }
+            })
+          ]));
+        } else {
+          const vInput = U.el('input', { type: 'text', class: 'input mono', value: item.value ?? '', placeholder: o.vPlaceholder, spellcheck: 'false' });
+          vInput.addEventListener('input', () => { item.value = vInput.value; if (pushPlaceholder()) { commit(); render(); } else commit(); });
+          bodyEl.appendChild(wrapMagicInput(vInput, flow, currentStepIndex, item.key || o.vPlaceholder));
+        }
+      } else {
+        const candBox = U.el('div', { class: 'kv-candidates' });
+        (item.candidates || []).forEach((cand, ci) => {
+          const cRow = U.el('div', { class: 'kv-candidate' });
+          const cSel = U.el('input', { type: 'checkbox', class: 'kv-cand-sel', title: '勾选后运行时执行一次' });
+          cSel.checked = cand.checked !== false;
+          cSel.addEventListener('change', () => { cand.checked = cSel.checked; commit(); });
+          cRow.appendChild(cSel);
+          const cInput = U.el('input', { type: 'text', class: 'input mono', value: cand.value ?? '', placeholder: '候选值 ' + (ci + 1), spellcheck: 'false' });
+          cInput.addEventListener('input', () => { cand.value = cInput.value; commit(); });
+          cRow.appendChild(wrapMagicInput(cInput, flow, currentStepIndex, item.key || o.vPlaceholder));
+          cRow.appendChild(U.el('button', {
+            class: 'kv-del', text: '×', title: '删除候选值',
+            onClick: () => { item.candidates.splice(ci, 1); commit(); render(); }
+          }));
+          candBox.appendChild(cRow);
+        });
+        bodyEl.appendChild(candBox);
+        bodyEl.appendChild(U.el('button', {
+          class: 'kv-add-cand', text: '+ 添加候选值',
+          onClick: () => { item.candidates.push({ value: '', checked: true }); commit(); render(); }
+        }));
+      }
+      group.appendChild(bodyEl);
+      return group;
+    }
 
     function render() {
       container.innerHTML = '';
-      const head = U.el('div', { class: 'kv-head' }, [
-        U.el('div', { class: 'kv-check' }),
-        U.el('div', { class: 'kv-k', text: 'KEY' }),
-        U.el('div', { class: 'kv-v', text: 'VALUE' }),
-        o.desc ? U.el('div', { class: 'kv-d', text: '说明' }) : null,
-        U.el('div', { class: 'kv-x' })
-      ]);
-      container.appendChild(head);
-
-      const commit = () => { onChange(list); markDirty(); };
-
-      const buildRow = (item, index, isPlaceholder) => {
-        const row = U.el('div', { class: 'kv-row' + (isPlaceholder ? ' placeholder' : '') });
-
-        const chk = U.el('input', { type: 'checkbox' });
-        chk.checked = item.enabled !== false;
-        chk.disabled = isPlaceholder;
-        chk.addEventListener('change', () => { item.enabled = chk.checked; commit(); });
-        row.appendChild(U.el('div', { class: 'kv-check' }, [chk]));
-
-        const mkInput = (field, ph, useMagic) => {
-          const inp = U.el('input', { type: 'text', value: item[field] ?? '', placeholder: ph, spellcheck: 'false' });
-          inp.addEventListener('input', () => {
-            item[field] = inp.value;
-            if (isPlaceholder && (item.key || item.value)) {
-              item.enabled = true;
-              list.push(item);
-              commit();
-              render();
-            } else {
-              commit();
-            }
-          });
-          if (useMagic) return wrapMagicInput(inp, flow, currentStepIndex, ph);
-          return inp;
-        };
-
-        row.appendChild(U.el('div', { class: 'kv-k' }, [mkInput('key', o.kPlaceholder)]));
-
-        const vCell = U.el('div', { class: 'kv-v', style: 'display:flex;align-items:center' });
-        if (o.fileType && item.type === 'file') {
-          vCell.appendChild(U.el('span', {
-            style: 'flex:1;padding:0 9px;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5c5c5c',
-            text: item.src || '未选择文件', title: item.src || ''
-          }));
-          vCell.appendChild(U.el('button', {
-            class: 'kv-file-btn', text: '选择文件',
-            onClick: async () => {
-              const r = await window.api.openDialog({ properties: ['openFile'] });
-              if (r.ok) { item.src = r.path; commit(); render(); }
-            }
-          }));
-        } else {
-          vCell.appendChild(mkInput('value', o.vPlaceholder, true));
-        }
-        if (o.fileType) {
-          const sel = U.el('select', { class: 'kv-type-select' }, [
-            U.el('option', { value: 'text', text: 'Text' }),
-            U.el('option', { value: 'file', text: 'File' })
-          ]);
-          sel.value = item.type || 'text';
-          sel.addEventListener('change', () => { item.type = sel.value; commit(); render(); });
-          vCell.appendChild(sel);
-        }
-        row.appendChild(vCell);
-
-        if (o.desc) row.appendChild(U.el('div', { class: 'kv-d' }, [mkInput('desc', '说明')]));
-
-        row.appendChild(U.el('div', { class: 'kv-x' }, [
-          isPlaceholder ? U.el('span') : U.el('button', {
-            class: 'kv-del', text: '×', title: '删除这一行',
-            onClick: () => { list.splice(index, 1); commit(); render(); }
-          })
-        ]));
-
-        return row;
-      };
-
-      list.forEach((item, i) => container.appendChild(buildRow(item, i, false)));
-      const ph = { key: '', value: '', desc: '', enabled: true, type: 'text' };
-      container.appendChild(buildRow(ph, -1, true));
+      list.forEach((item, i) => container.appendChild(buildGroup(item, i, false)));
+      const ph = { key: '', value: '', desc: '', enabled: true, multi: false, candidates: [], type: 'text' };
+      container.appendChild(buildGroup(ph, -1, true));
     }
 
     render();
@@ -753,39 +846,154 @@ const Flow = (() => {
   }
 
   /* ------------------------------------------------------------------
-     运行流程
+     运行结果渲染（每个节点可展开查看响应）
      ------------------------------------------------------------------ */
+  function runOkCheck(run) {
+    const st = run.response || {};
+    return !st.error && st.status && st.status < 400;
+  }
+
+  function runStatusText(run) {
+    const st = run.response || {};
+    return st.error ? '异常' : `${st.status || '-'} ${st.statusText || ''}`;
+  }
+
+  function stepStatusText(sr) {
+    if (sr.runCount > 1) {
+      const ok = sr.runs.filter(runOkCheck).length;
+      return `${ok}/${sr.runCount} 成功`;
+    }
+    const st = (sr.runs[0] && sr.runs[0].response) || {};
+    return st.error ? '异常' : `${st.status || '-'} ${st.statusText || ''}`;
+  }
+
+  function stepTime(sr) {
+    const t = (sr.runs || []).reduce((a, r) => a + ((r.response && r.response.timeMs) || 0), 0);
+    return U.fmtTime(t);
+  }
+
+  function renderRunDetail(run) {
+    const wrap = U.el('div', { class: 'run-detail' });
+    const st = run.response || {};
+
+    wrap.appendChild(U.el('div', { class: 'run-status-line' }, [
+      U.el('span', { class: 'run-method ' + U.methodClass(run.method), text: run.method }),
+      U.el('span', { class: 'run-url mono', text: run.url || '', title: run.url || '' }),
+      U.el('span', { class: 'spacer' }),
+      U.el('span', {
+        class: 'run-status ' + (st.error ? 'err' : (st.status < 400 ? 'ok' : 'err')),
+        text: st.error ? ('异常: ' + st.error) : `${st.status} ${st.statusText || ''}`
+      }),
+      U.el('span', { class: 'muted-sm', text: U.fmtTime(st.timeMs) })
+    ]));
+
+    if (st.headers && Object.keys(st.headers).length) {
+      wrap.appendChild(U.el('div', { class: 'run-sub' }, [
+        U.el('div', { class: 'run-sub-label', text: '响应头' }),
+        U.el('div', { class: 'sp-kv' },
+          Object.entries(st.headers).map(([k, v]) => U.el('div', { text: `${k}: ${v}` })))
+      ]));
+    }
+
+    const bWrap = U.el('div', { class: 'run-sub' }, [U.el('div', { class: 'run-sub-label', text: '响应体' })]);
+    let bodyHtml;
+    if (st.error) bodyHtml = U.escapeHtml(st.error);
+    else if (st.parsedBody !== undefined) bodyHtml = U.highlightJSON(st.parsedBody);
+    else bodyHtml = U.escapeHtml(st.bodyText || '');
+    bWrap.appendChild(U.el('pre', { class: 'sp-pre code-hl', html: bodyHtml }));
+    wrap.appendChild(bWrap);
+
+    return wrap;
+  }
+
   function renderFlowResult(result) {
     const box = U.$('#flowResult');
-    if (!result) {
-      box.innerHTML = '';
-      box.hidden = true;
-      return;
-    }
+    if (!result) { box.innerHTML = ''; box.hidden = true; return; }
     box.hidden = false;
     box.innerHTML = '';
 
+    const totalRuns = (result.stepResults || []).reduce((n, s) => n + (s.runCount || 1), 0);
     const head = U.el('div', { class: 'flow-result-head' }, [
       U.el('span', { text: result.ok ? '✅ 流程运行完成' : '❌ 流程运行失败', style: 'font-weight:600' }),
       U.el('span', { class: 'spacer' }),
-      U.el('span', { class: 'muted-sm', text: `耗时 ${U.fmtTime(result.timeMs)}` })
+      U.el('span', { class: 'muted-sm', text: `${result.stepResults.length} 步 · ${totalRuns} 次请求 · 耗时 ${U.fmtTime(result.timeMs)}` })
     ]);
     box.appendChild(head);
 
     const list = U.el('div', { class: 'flow-result-list' });
-    for (const stepRes of result.stepResults || []) {
-      const st = stepRes.response || {};
-      const ok = !st.error && st.status && st.status < 400;
-      const item = U.el('div', { class: 'flow-result-item' + (ok ? ' ok' : ' err') }, [
-        U.el('span', { class: 'node-method ' + U.methodClass(stepRes.method), text: stepRes.method }),
-        U.el('span', { class: 'flow-result-name', text: stepRes.name }),
+    (result.stepResults || []).forEach((sr) => {
+      const stepHeader = U.el('div', {
+        class: 'flow-result-item ' + (sr.ok ? 'ok' : 'err') +
+          (sr.runCount > 1 || (sr.runs && sr.runs[0]) ? ' expandable' : '')
+      }, [
+        U.el('span', { class: 'flow-result-caret', html: caretSvg }),
+        U.el('span', { class: 'node-method ' + U.methodClass(sr.method), text: sr.method }),
+        U.el('span', { class: 'flow-result-name', text: sr.name }),
         U.el('span', { class: 'spacer' }),
-        U.el('span', { text: st.error ? '异常' : `${st.status || '-'} ${st.statusText || ''}` }),
-        U.el('span', { class: 'muted-sm', text: U.fmtTime(st.timeMs) })
+        sr.runCount > 1 ? U.el('span', { class: 'flow-run-count', text: `${sr.runCount} 次` }) : null,
+        U.el('span', { text: stepStatusText(sr) }),
+        U.el('span', { class: 'muted-sm', text: stepTime(sr) })
       ]);
-      list.appendChild(item);
-    }
+
+      if (sr.runCount > 1) {
+        const runsBox = U.el('div', { class: 'flow-result-runs', hidden: true });
+        sr.runs.forEach((run, ri) => {
+          const runRow = U.el('div', { class: 'flow-run-item ' + (runOkCheck(run) ? 'ok' : 'err') }, [
+            U.el('span', { class: 'flow-run-caret', html: caretSvg }),
+            U.el('span', { class: 'flow-run-idx', text: '#' + (ri + 1) }),
+            U.el('span', { class: 'flow-run-url mono', text: run.url || '(无 URL)', title: run.url || '' }),
+            U.el('span', { class: 'spacer' }),
+            U.el('span', { text: runStatusText(run) }),
+            U.el('span', { class: 'muted-sm', text: U.fmtTime((run.response || {}).timeMs) })
+          ]);
+          const detail = U.el('div', { class: 'flow-run-detail', hidden: true }, [renderRunDetail(run)]);
+          runRow.addEventListener('click', () => { detail.hidden = !detail.hidden; });
+          runsBox.appendChild(runRow);
+          runsBox.appendChild(detail);
+        });
+        stepHeader.addEventListener('click', () => { runsBox.hidden = !runsBox.hidden; });
+        list.appendChild(stepHeader);
+        list.appendChild(runsBox);
+      } else if (sr.runs && sr.runs[0]) {
+        const detail = U.el('div', { class: 'flow-run-detail', hidden: true }, [renderRunDetail(sr.runs[0])]);
+        stepHeader.addEventListener('click', () => { detail.hidden = !detail.hidden; });
+        list.appendChild(stepHeader);
+        list.appendChild(detail);
+      } else {
+        list.appendChild(stepHeader);
+      }
+    });
     box.appendChild(list);
+  }
+
+  /* ------------------------------------------------------------------
+     运行流程（含多选参数批量执行）
+     ------------------------------------------------------------------ */
+  function buildStepIterations(step) {
+    const groups = [];
+    const lists = ['params', 'pathVars', 'urlencoded', 'formdata'];
+    for (const name of lists) {
+      const arr = step[name];
+      if (!Array.isArray(arr)) continue;
+      arr.forEach((item, index) => {
+        if (item && item.multi && Array.isArray(item.candidates)) {
+          const vals = item.candidates
+            .filter((c) => c.checked !== false && c.value !== '')
+            .map((c) => c.value);
+          if (vals.length) groups.push({ name, index, vals });
+        }
+      });
+    }
+    if (!groups.length) return [U.clone(step)];
+    const combos = U.cartesian(groups.map((g) => g.vals));
+    return combos.map((combo) => {
+      const cloned = U.clone(step);
+      groups.forEach((g, k) => {
+        const arr = cloned[g.name];
+        if (arr && arr[g.index]) arr[g.index].value = combo[k];
+      });
+      return cloned;
+    });
   }
 
   async function runFlow(flow) {
@@ -803,48 +1011,60 @@ const Flow = (() => {
     const ctx = { stepResults: [] };
     const stepResults = [];
 
+    renderFlowResult(null);
+
     for (let i = 0; i < flow.steps.length; i++) {
       const step = flow.steps[i];
-      UI.toast(`流程运行中… 第 ${i + 1}/${flow.steps.length} 步`, '', 1200);
-      try {
-        const { res, meta, config } = await Http.send(step, { env, ctx });
-        const parsed = U.tryParseJSON(res.bodyText || '');
-        const result = {
-          stepId: step.id,
-          name: step.name,
-          method: step.method,
-          url: config && config.url,
-          request: config,
-          response: {
-            status: res.status,
-            statusText: res.statusText,
-            headers: res.headers,
-            bodyText: res.bodyText,
-            parsedBody: parsed.ok ? parsed.value : undefined,
-            timeMs: res.timeMs,
-            error: res.error
-          },
-          meta
-        };
-        ctx.stepResults.push(result);
-        stepResults.push(result);
-        FlowRuntime && FlowRuntime.setStepResult && FlowRuntime.setStepResult(step.id, result);
-        if (res.error || !res.status || res.status >= 400) {
-          renderFlowResult({ ok: false, timeMs: Date.now() - started, stepResults });
-          UI.toast(`第 ${i + 1} 步失败：${res.error || res.status}`, 'err', 4000);
-          return;
+      const iterations = buildStepIterations(step);
+      UI.toast(`流程运行中… 第 ${i + 1}/${flow.steps.length} 步` +
+        (iterations.length > 1 ? `（${iterations.length} 次批量）` : ''), '', 1200);
+
+      const runs = [];
+      let stepOk = true;
+      let last = null;
+
+      for (const itStep of iterations) {
+        try {
+          const { res, meta, config } = await Http.send(itStep, { env, ctx });
+          const parsed = U.tryParseJSON(res.bodyText || '');
+          const run = {
+            name: step.name,
+            method: step.method,
+            url: config && config.url,
+            request: config,
+            response: {
+              status: res.status,
+              statusText: res.statusText,
+              headers: res.headers,
+              bodyText: res.bodyText,
+              parsedBody: parsed.ok ? parsed.value : undefined,
+              timeMs: res.timeMs,
+              error: res.error
+            },
+            meta
+          };
+          runs.push(run);
+          last = run;
+          if (res.error || !res.status || res.status >= 400) stepOk = false;
+        } catch (e) {
+          const run = { name: step.name, method: step.method, response: { error: e.message || String(e) }, meta: {} };
+          runs.push(run);
+          last = run;
+          stepOk = false;
         }
-      } catch (e) {
-        const result = {
-          stepId: step.id,
-          name: step.name,
-          method: step.method,
-          response: { error: e.message || String(e) },
-          meta: {}
-        };
-        stepResults.push(result);
+      }
+
+      const sr = {
+        stepId: step.id, name: step.name, method: step.method,
+        multi: iterations.length > 1, runCount: runs.length, ok: stepOk, runs
+      };
+      ctx.stepResults.push(last);
+      stepResults.push(sr);
+      FlowRuntime && FlowRuntime.setStepResult(step.id, last);
+
+      if (!stepOk) {
         renderFlowResult({ ok: false, timeMs: Date.now() - started, stepResults });
-        UI.toast(`第 ${i + 1} 步异常：${e.message || e}`, 'err', 4000);
+        UI.toast(`第 ${i + 1} 步失败`, 'err', 4000);
         return;
       }
     }
@@ -902,6 +1122,6 @@ const Flow = (() => {
   }
 
   return {
-    bind, renderList, renderCurrent, current, openFlow, runFlow, FlowRuntime
+    bind, renderList, renderCurrent, current, openFlow, runFlow, buildStepIterations, FlowRuntime
   };
 })();
