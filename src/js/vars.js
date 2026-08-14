@@ -46,27 +46,43 @@ const Vars = (() => {
 
   /** 按路径从流程步骤结果中提取值 */
   function resolveStepValue(name, ctx) {
-    // 语法：$1.response.body.data.f_Id 或 $1.response.headers.xxx 或 $1.response.status
+    // 支持写法（body 查询无需写 response.body 前缀，普通查询即可）：
+    //   $1                              -> 整个步骤结果
+    //   $1.data.f_Id                    -> body 路径（无前缀，默认查 body）
+    //   $1.response.body.data.f_Id      -> body 路径（旧写法，向后兼容）
+    //   $1.headers.x-request-id         -> 响应头（短前缀）
+    //   $1.response.headers.x-request-id -> 响应头（旧写法，向后兼容）
+    //   $1.status / $1.response.status  -> 状态码
     if (!ctx || !ctx.stepResults) return undefined;
-    const m = /^\$(\d+)(\.response(\.body|\.headers|\.status)?.*)?$/.exec(name);
+    const m = /^\$(\d+)(.*)$/.exec(name);
     if (!m) return undefined;
     const idx = Number(m[1]) - 1;
     const result = ctx.stepResults[idx];
     if (!result) return undefined;
-    const rest = m[2] || '';
+    let rest = m[2] || '';
     if (!rest) return result;
     const res = result.response || {};
-    if (rest === '.response.status' || rest === '.response.statusCode') return String(res.status || '');
-    if (rest.startsWith('.response.headers')) {
-      const path = rest.slice('.response.headers'.length);
-      if (!path) return res.headers || {};
-      return U.getByPath(res.headers || {}, path.slice(1));
+
+    // 兼容旧写法的 .response 前缀
+    if (rest.startsWith('.response')) rest = rest.slice('.response'.length);
+
+    // 现在 rest 形如 .body.x / .headers.x / .status / .data.f_Id
+    if (rest === '.status' || rest === '.statusCode') return String(res.status || '');
+    if (rest.startsWith('.headers')) {
+      const p = rest.slice('.headers'.length);
+      if (!p) return res.headers || {};
+      return U.getByPath(res.headers || {}, p.slice(1));
     }
-    if (rest.startsWith('.response.body')) {
-      const path = rest.slice('.response.body'.length);
-      if (!path) return res.parsedBody !== undefined ? res.parsedBody : res.bodyText;
+    if (rest.startsWith('.body')) {
+      const p = rest.slice('.body'.length);
+      if (!p) return res.parsedBody !== undefined ? res.parsedBody : res.bodyText;
       const body = res.parsedBody !== undefined ? res.parsedBody : (U.tryParseJSON(res.bodyText || '').value || {});
-      return U.getByPath(body, path.slice(1));
+      return U.getByPath(body, p.slice(1));
+    }
+    // 无前缀 -> 直接当作 body 路径查询（普通查询，无需写 response.body）
+    if (rest.startsWith('.')) {
+      const body = res.parsedBody !== undefined ? res.parsedBody : (U.tryParseJSON(res.bodyText || '').value || {});
+      return U.getByPath(body, rest.slice(1));
     }
     return undefined;
   }

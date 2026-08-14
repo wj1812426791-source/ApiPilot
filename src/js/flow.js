@@ -3,7 +3,7 @@
    - 左侧「测试流程」标签页：新建/重命名/删除/运行流程，支持文件夹集合
    - 流程编辑器：垂直步骤列表，支持从集合树拖拽请求加入
    - 魔棒：在任意输入框右侧读取前置步骤运行结果（response.body/headers/status）
-   - 运行：依次执行步骤，自动用 {{$1.response.body.data.f_Id}} 等表达式传递数据
+   - 运行：依次执行步骤，自动用 {{$1.data.f_Id}} 等表达式传递数据（body 查询无需 response.body 前缀）
    ========================================================================= */
 const Flow = (() => {
 
@@ -718,7 +718,7 @@ const Flow = (() => {
     ]);
     sourceSelect.value = source;
 
-    const pathInput = U.el('input', { type: 'text', class: 'input mono', value: jsonPath, placeholder: '如 data.f_Id' });
+    const pathInput = U.el('input', { type: 'text', class: 'input mono', value: jsonPath, placeholder: '如 data.f_Id（body 查询无需前缀）' });
     const previewBox = U.el('div', { class: 'magic-preview', text: '（请先运行流程以产生结果，或手动填写 JSONPath）' });
     const treeBox = U.el('div', { class: 'json-browser-tree', hidden: true });
 
@@ -808,7 +808,15 @@ const Flow = (() => {
           class: 'btn primary', text: '插入',
           onClick: () => {
             const stepIdx = Number(stepSelect.value);
-            const expr = `{{$${stepIdx + 1}.${source}${jsonPath ? '.' + jsonPath : ''}}}`;
+            // body 查询无需写 response.body 前缀，直接采用普通路径；headers/status 用短前缀
+            let expr;
+            if (source === 'response.body') {
+              expr = `{{$${stepIdx + 1}${jsonPath ? '.' + jsonPath : ''}}}`;
+            } else if (source === 'response.headers') {
+              expr = `{{$${stepIdx + 1}.headers${jsonPath ? '.' + jsonPath : ''}}}`;
+            } else {
+              expr = `{{$${stepIdx + 1}.status}}`;
+            }
             insertAtCursor(input, expr);
             input.dispatchEvent(new Event('input'));
             UI.close();

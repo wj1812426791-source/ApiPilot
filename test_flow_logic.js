@@ -80,6 +80,14 @@ check('组合 baseUrl + $1', combined === 'http://localhost:8080/api/project/F_2
 if (combined !== 'http://localhost:8080/api/project/F_20260811001') console.log('    actual:', combined);
 check('未定义 $2 应保留原样', Vars.resolve('{{$2.response.body.id}}', undefined, ctx) === '{{$2.response.body.id}}');
 
+console.log('\nVars $n 普通查询（body 无前缀）测试');
+check('普通查询 $1.data.f_Id（无 response.body 前缀）', Vars.resolve('{{$1.data.f_Id}}', undefined, ctx) === 'F_20260811001');
+check('普通查询 $1.data.name', Vars.resolve('{{$1.data.name}}', undefined, ctx) === '项目A');
+check('组合 baseUrl + 普通查询 $1.data.f_Id', Vars.resolve('{{baseUrl}}/api/project/{{$1.data.f_Id}}', undefined, ctx) === 'http://localhost:8080/api/project/F_20260811001');
+check('短前缀 $1.headers.x-request-id', Vars.resolve('{{$1.headers.x-request-id}}', undefined, ctx) === 'abc123');
+check('短前缀 $1.status', Vars.resolve('{{$1.status}}', undefined, ctx) === '200');
+check('整个步骤结果 $1 应解析（不保留原样）', Vars.resolve('{{$1}}', undefined, ctx) !== '{{$1}}');
+
 console.log('\nHTTP build 流程变量测试');
 // 用 vm 跑 http.js 需要 Auth/Store，比较复杂；这里只确认 build 函数签名接受 ctx
 const httpCode = loadSrc('http.js');
