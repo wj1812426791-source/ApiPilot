@@ -311,6 +311,18 @@ const Importer = (() => {
         return;
       }
 
+      // ApiPilot 单个请求导出包
+      if (json && json._apipilotRequest) {
+        const src = json.request;
+        if (!src || typeof src !== 'object') { UI.toast('请求数据为空', 'err'); return; }
+        const fresh = Object.assign(Store.newRequest(src.name || '导入的请求'), U.clone(src),
+          { id: U.uid('req'), type: 'request' });
+        UI.close();
+        Editor.newTab(fresh);
+        UI.toast('已导入请求「' + (fresh.name || '未命名') + '」', 'ok', 2600);
+        return;
+      }
+
       // 支持一次导入多个集合（Postman 备份格式）
       const list = Array.isArray(json) ? json : (json.collections || [json]);
       let count = 0;
@@ -342,7 +354,7 @@ const Importer = (() => {
     UI.open({
       title: '导入', size: 'md',
       body: U.el('div', {}, [
-        U.el('div', { class: 'panel-caption', text: '支持：Postman Collection v2.1 JSON、Postman 环境 JSON、cURL 命令' }),
+        U.el('div', { class: 'panel-caption', text: '支持：Postman Collection v2.1 JSON、Postman 环境 JSON、ApiPilot 请求 JSON、cURL 命令' }),
         ta
       ]),
       footer: U.el('div', { style: 'display:flex;gap:9px;width:100%' }, [
@@ -368,6 +380,60 @@ const Importer = (() => {
     let n = 0;
     Store.walk([col], (x) => { if (x.type === 'request') n++; });
     return n;
+  }
+
+  /* ==================================================================
+     单个请求导出（Postman / ApiPilot 原生 / cURL）
+     ================================================================== */
+  async function exportRequest(req) {
+    if (!req) return;
+    const safe = (req.name || 'request').replace(/[\\/:*?"<>|]/g, '_');
+
+    const formats = [
+      { id: 'postman', label: 'Postman Collection（可导入 Postman / ApiPilot）', ext: 'postman_collection.json' },
+      { id: 'apipilot', label: 'ApiPilot 原生 JSON（保留全部设置，可再导入）', ext: 'request.json' },
+      { id: 'curl', label: 'cURL 命令文本（txt）', ext: 'curl.txt' }
+    ];
+    let picked = 'postman';
+
+    const body = U.el('div', {}, [
+      U.el('div', { class: 'panel-caption', text: '导出请求：' + (req.name || '未命名请求') }),
+      ...formats.map((f) => {
+        const radio = U.el('input', { type: 'radio', name: 'expReqFmt', value: f.id });
+        if (f.id === picked) radio.checked = true;
+        radio.addEventListener('change', () => { if (radio.checked) picked = f.id; });
+        return U.el('label', { class: 'switch-row' }, [radio, U.el('span', { text: f.label })]);
+      })
+    ]);
+
+    const doExport = async () => {
+      const f = formats.find((x) => x.id === picked) || formats[0];
+      let content;
+      if (f.id === 'postman') {
+        const col = { id: U.uid('col'), name: req.name || '请求', items: [U.clone(req)] };
+        content = JSON.stringify(toPostman(col), null, 2);
+      } else if (f.id === 'apipilot') {
+        content = JSON.stringify({
+          _apipilotRequest: true,
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          request: U.clone(req)
+        }, null, 2);
+      } else {
+        content = toCurl(req, Store.activeEnv());
+      }
+      const r = await window.api.saveDialog({ defaultPath: `${safe}.${f.ext}`, content });
+      UI.close();
+      if (r.ok) UI.toast('已导出到 ' + r.path, 'ok', 3000);
+    };
+
+    UI.open({
+      title: '导出请求', size: 'sm', body,
+      footer: U.el('div', { style: 'display:flex;gap:9px' }, [
+        U.el('button', { class: 'btn', text: '取消', onClick: () => UI.close() }),
+        U.el('button', { class: 'btn primary', text: '导出', onClick: doExport })
+      ])
+    });
   }
 
   async function exportCollection(col) {
@@ -519,7 +585,7 @@ const Importer = (() => {
 
   return {
     fromPostman, toPostman, fromCurl, toCurl,
-    importDialog, exportDialog, exportCollection, tryImportApiPilotBundle,
+    importDialog, exportDialog, exportCollection, exportRequest, tryImportApiPilotBundle,
     exportEnvironment, importEnvironmentsFromFile
   };
 })();

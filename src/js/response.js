@@ -35,6 +35,11 @@ const Response = (() => {
   function renderMeta(res, meta) {
     const box = U.$('#resMeta');
     box.innerHTML = '';
+    if (res.canceled) {
+      box.appendChild(U.el('span', { class: 'm-item st-4', html: `<b>已取消</b>` }));
+      if (res.timeMs) box.appendChild(U.el('span', { class: 'm-item', html: `耗时 <b>${U.fmtTime(res.timeMs)}</b>` }));
+      return;
+    }
     if (res.error) {
       box.appendChild(U.el('span', { class: 'm-item st-5', html: `<b>请求失败</b>` }));
       if (res.timeMs) box.appendChild(U.el('span', { class: 'm-item', html: `耗时 <b>${U.fmtTime(res.timeMs)}</b>` }));
@@ -56,6 +61,14 @@ const Response = (() => {
     const content = U.$('#resContent');
     const toolbar = U.$('#resBodyToolbar');
     content.innerHTML = '';
+
+    if (res.canceled) {
+      toolbar.hidden = true;
+      content.appendChild(U.el('div', { class: 'res-placeholder' }, [
+        U.el('p', { text: '请求已取消（可重新点「发送」再试）' })
+      ]));
+      return;
+    }
 
     if (res.error) {
       toolbar.hidden = true;

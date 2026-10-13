@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('apiFlags', {
 contextBridge.exposeInMainWorld('api', {
   selftestDone: (payload) => ipcRenderer.send('selftest:done', payload),
   send: (config) => ipcRenderer.invoke('http:send', config),
+  cancel: (reqId) => ipcRenderer.invoke('http:cancel', reqId),
   loadStore: () => ipcRenderer.invoke('store:load'),
   saveStore: (data) => ipcRenderer.invoke('store:save', data),
   openDialog: (opts) => ipcRenderer.invoke('dialog:open', opts),

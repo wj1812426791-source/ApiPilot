@@ -277,7 +277,7 @@ const SelfTest = (() => {
     /* 16. 测试流程 */
     const flow = Store.newFlow('自检测试流程');
     const step1 = Store.newFlowStep({ name: '新增项目', method: 'POST', url: '{{baseUrl}}/api/echo', body: { mode: 'raw', raw: '{"data":{"f_Id":"FLOW_001"}}', rawType: 'application/json', formdata: [], urlencoded: [] } });
-    const step2 = Store.newFlowStep({ name: '查询项目', method: 'GET', url: '{{baseUrl}}/api/echo/{{$1.response.body.data.f_Id}}' });
+    const step2 = Store.newFlowStep({ name: '查询项目', method: 'GET', url: '{{baseUrl}}/api/echo/{{$1.data.f_Id}}' });
     flow.steps.push(step1, step2);
     Store.state.flows.push(flow);
     check('测试流程：创建 2 步流程', flow.steps.length === 2);
@@ -300,7 +300,7 @@ const SelfTest = (() => {
     check('测试流程：运行完成无异常', flowR === undefined); // runFlow 无异常返回 undefined
 
     // 验证运行结果缓存可被魔棒使用
-    const cached = FlowRuntime && FlowRuntime.getStepResult && FlowRuntime.getStepResult(step1.id);
+    const cached = Flow.FlowRuntime && Flow.FlowRuntime.getStepResult && Flow.FlowRuntime.getStepResult(step1.id);
     check('测试流程：运行结果已缓存', cached && cached.response && cached.response.parsedBody && cached.response.parsedBody.data && cached.response.parsedBody.data.f_Id === 'FLOW_001');
 
     // 验证界面元素

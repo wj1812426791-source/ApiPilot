@@ -188,6 +188,7 @@ const Tree = (() => {
           UI.toast('已复制 cURL 到剪贴板', 'ok');
         }
       });
+      items.push({ label: '导出请求…', action: () => Importer.exportRequest(node) });
       if (node.schedule && node.schedule.enabled) {
         items.push({
           label: '取消定时任务', danger: true,

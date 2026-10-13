@@ -92,7 +92,7 @@ console.log('\nHTTP build 流程变量测试');
 // 用 vm 跑 http.js 需要 Auth/Store，比较复杂；这里只确认 build 函数签名接受 ctx
 const httpCode = loadSrc('http.js');
 check('http.js 包含 build(req, env, ctx)', httpCode.includes('function build(req, env, ctx)'));
-check('send 支持 { env, ctx }', httpCode.includes('async function send(req, { onStage, env, ctx } = {})'));
+check('send 支持 { onStage, env, ctx, reqId }', httpCode.includes('async function send(req, { onStage, env, ctx, reqId } = {})'));
 
 console.log(`\n结果：${passed} 通过，${failed} 失败`);
 process.exit(failed ? 1 : 0);

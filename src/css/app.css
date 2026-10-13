@@ -522,6 +522,9 @@ input, select, textarea { outline: none; }
 
 .send-btn { min-width: 82px; flex: none; }
 .save-btn { flex: none; }
+/* 发送中：按钮变为「取消」，用醒目红色提示可点击中止 */
+.send-btn.sending { background: #e5484d; border-color: #e5484d; color: #fff; }
+.send-btn.sending:hover { background: #cf3a3f; border-color: #cf3a3f; }
 
 /* ============================ 请求 Tabs ============================ */
 .req-tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--border); flex: none; }

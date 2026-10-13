@@ -642,31 +642,56 @@ const Editor = (() => {
      发送
      ================================================================== */
   let sending = false;
+  let sendingReqId = null;
+  let canceling = false;
+
+  const stageLabel = {
+    'logging-in': '登录中',
+    'sending': '发送中',
+    'relogin': '重新登录'
+  };
+
+  // 发送中把按钮变成「取消」按钮，点击可中止卡住的请求
+  function renderSendBusy(stage) {
+    const btn = U.$('#btnSend');
+    if (!btn) return;
+    btn.classList.add('sending');
+    btn.disabled = false;
+    btn.title = '点击取消本次请求';
+    btn.innerHTML = '<span class="spin"></span> 取消' + (stageLabel[stage] ? ' · ' + stageLabel[stage] : '');
+  }
+
+  function resetSendButton() {
+    const btn = U.$('#btnSend');
+    if (!btn) return;
+    btn.classList.remove('sending');
+    btn.disabled = false;
+    btn.title = '';
+    btn.textContent = '发送';
+  }
 
   async function send() {
     const tab = current();
     const req = currentReq();
     if (!req || sending) return;
 
-    const btn = U.$('#btnSend');
     sending = true;
-    btn.disabled = true;
-    const originalText = btn.textContent;
-
-    const stageText = {
-      'logging-in': '登录中',
-      'sending': '发送中',
-      'relogin': '重新登录'
-    };
-    btn.innerHTML = '<span class="spin"></span>';
+    canceling = false;
+    sendingReqId = U.uid('rsent');
+    renderSendBusy();
 
     const started = Date.now();
     try {
       const { res, meta, config } = await Http.send(req, {
-        onStage: (s) => {
-          if (stageText[s]) btn.innerHTML = `<span class="spin"></span> ${stageText[s]}`;
-        }
+        reqId: sendingReqId,
+        onStage: (s) => renderSendBusy(s)
       });
+
+      if (res && res.canceled) {
+        Response.show({ error: '请求已取消', canceled: true, timeMs: Date.now() - started }, {}, tab);
+        UI.toast('已取消本次请求', 'warn', 1800);
+        return;
+      }
 
       Response.show(res, meta, tab);
 
@@ -693,9 +718,19 @@ const Editor = (() => {
       Response.show({ error: e.message || String(e) }, {}, tab);
     } finally {
       sending = false;
-      btn.disabled = false;
-      btn.textContent = originalText;
+      sendingReqId = null;
+      canceling = false;
+      resetSendButton();
     }
+  }
+
+  /** 取消进行中的请求 */
+  async function cancelSend() {
+    if (!sending || !sendingReqId || canceling) return;
+    canceling = true;
+    const btn = U.$('#btnSend');
+    if (btn) btn.innerHTML = '<span class="spin"></span> 取消中…';
+    try { await window.api.cancel(sendingReqId); } catch (_) { /* 忽略取消异常 */ }
   }
 
   /* ==================================================================
@@ -725,7 +760,7 @@ const Editor = (() => {
       renderTabs();
     });
 
-    U.$('#btnSend').addEventListener('click', send);
+    U.$('#btnSend').addEventListener('click', () => { if (sending) cancelSend(); else send(); });
     U.$('#btnSave').addEventListener('click', save);
 
     U.$$('.req-tab').forEach((btn) => {
@@ -765,6 +800,13 @@ const Editor = (() => {
     });
 
     U.$('#rawBody').addEventListener('keydown', (e) => {
+      // Ctrl+A 只全选 Body 内容，不要选中整个页面
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.target.select();
+        return;
+      }
       if (e.key === 'Tab') {
         e.preventDefault();
         const ta = e.target;
@@ -772,6 +814,27 @@ const Editor = (() => {
         ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(ta.selectionEnd);
         ta.selectionStart = ta.selectionEnd = s + 2;
         ta.dispatchEvent(new Event('input'));
+      }
+    });
+
+    // 记录最近一次点击是否落在 Body 面板内（供全局 Ctrl+A 判断作用范围）
+    let bodyRegionActive = false;
+    document.addEventListener('mousedown', (e) => {
+      const panel = U.$('.req-panel[data-rp="body"]');
+      bodyRegionActive = !!(panel && panel.offsetParent !== null && panel.contains(e.target));
+    }, true);
+
+    // 点过 Body 框但焦点没落在输入框（例如点在空白处）时，Ctrl+A 也只全选 Body
+    document.addEventListener('keydown', (e) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a')) return;
+      const ae = document.activeElement;
+      const isField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+      if (isField || !bodyRegionActive) return;
+      const raw = U.$('#rawBody');
+      if (raw && raw.offsetParent !== null) {
+        e.preventDefault();
+        raw.focus();
+        raw.select();
       }
     });
 

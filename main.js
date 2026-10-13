@@ -193,9 +193,16 @@ function buildBody(body, headers) {
 }
 
 // ---------------------------------------------------------------------------
+// 进行中的请求（供「取消发送」使用）
+// reqId -> ClientRequest；canceledIds 记录被主动取消的 reqId（跨重定向保持）
+// ---------------------------------------------------------------------------
+const activeRequests = new Map();
+const canceledIds = new Set();
+
+// ---------------------------------------------------------------------------
 // 核心：发送 HTTP 请求
 // ---------------------------------------------------------------------------
-function doRequest(config, redirectCount, startedAt) {
+function doRequest(config, redirectCount, startedAt, reqId) {
   return new Promise((resolve) => {
     let target;
     try {
@@ -258,6 +265,7 @@ function doRequest(config, redirectCount, startedAt) {
     const finish = (payload) => {
       if (settled) return;
       settled = true;
+      if (reqId) { activeRequests.delete(reqId); canceledIds.delete(reqId); }
       resolve(payload);
     };
 
@@ -265,6 +273,13 @@ function doRequest(config, redirectCount, startedAt) {
       ttfb = Date.now() - startedAt;
       const chunks = [];
       let total = 0;
+      // 请求被取消时，响应流可能报错；统一收敛为「已取消」，避免未处理错误
+      res.on('error', (e) => {
+        if (reqId && canceledIds.has(reqId)) {
+          return finish({ error: '请求已取消', canceled: true, timeMs: Date.now() - startedAt });
+        }
+        finish({ error: e.message || String(e), timeMs: Date.now() - startedAt });
+      });
       res.on('data', (c) => {
         chunks.push(c);
         total += c.length;
@@ -300,7 +315,7 @@ function doRequest(config, redirectCount, startedAt) {
             }
             nextConfig.headers = h;
           }
-          return doRequest(nextConfig, redirectCount + 1, startedAt).then((r) => {
+          return doRequest(nextConfig, redirectCount + 1, startedAt, reqId).then((r) => {
             finish({ ...r, redirects: [{ from: config.url, to: nextUrl, status }, ...(r.redirects || [])] });
           });
         }
@@ -335,12 +350,17 @@ function doRequest(config, redirectCount, startedAt) {
       });
     });
 
+    if (reqId) activeRequests.set(reqId, req);
+
     req.setTimeout(timeout, () => {
       req.destroy();
       finish({ error: `请求超时（${timeout}ms）`, timeMs: Date.now() - startedAt });
     });
 
     req.on('error', (err) => {
+      if (reqId && canceledIds.has(reqId)) {
+        return finish({ error: '请求已取消', canceled: true, timeMs: Date.now() - startedAt });
+      }
       let msg = err.message || String(err);
       if (err.code === 'ENOTFOUND') msg = `无法解析域名: ${target.hostname}`;
       else if (err.code === 'ECONNREFUSED') msg = `连接被拒绝: ${target.host}`;
@@ -360,10 +380,20 @@ function doRequest(config, redirectCount, startedAt) {
 ipcMain.handle('http:send', async (_evt, config) => {
   const startedAt = Date.now();
   try {
-    return await doRequest(config, 0, startedAt);
+    return await doRequest(config, 0, startedAt, config && config.reqId);
   } catch (e) {
     return { error: e.message || String(e), timeMs: Date.now() - startedAt };
   }
+});
+
+// 取消进行中的请求：销毁对应 ClientRequest，并标记为已取消
+ipcMain.handle('http:cancel', async (_evt, reqId) => {
+  if (!reqId) return { ok: false, reason: 'no-id' };
+  const req = activeRequests.get(reqId);
+  if (!req) return { ok: false, reason: 'not-found' };
+  canceledIds.add(reqId);
+  try { req.destroy(new Error('canceled by user')); } catch (_) { /* 忽略销毁异常 */ }
+  return { ok: true };
 });
 
 ipcMain.handle('cookie:clear', async (_evt, host) => {

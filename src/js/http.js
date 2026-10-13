@@ -110,7 +110,7 @@ const Http = (() => {
   }
 
   /** 发送（自动处理 Token） */
-  async function send(req, { onStage, env, ctx } = {}) {
+  async function send(req, { onStage, env, ctx, reqId } = {}) {
     const activeEnv = env !== undefined ? env : Store.activeEnv();
     const stage = (s) => { if (onStage) onStage(s); };
     const meta = { reloggedIn: false, loginError: null, injected: null };
@@ -135,6 +135,7 @@ const Http = (() => {
     // 阶段 2：正式发送
     stage('sending');
     let built = build(req, activeEnv, ctx);
+    if (reqId) built.config.reqId = reqId;   // 供主进程取消用
     meta.injected = built.injected;
     let res = await window.api.send(built.config);
     res.finalUrl = built.config.url;
@@ -146,6 +147,7 @@ const Http = (() => {
       if (lr.ok) {
         meta.reloggedIn = true;
         built = build(req, activeEnv, ctx);
+        if (reqId) built.config.reqId = reqId;
         meta.injected = built.injected;
         const retry = await window.api.send(built.config);
         retry.finalUrl = built.config.url;
