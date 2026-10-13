@@ -140,6 +140,12 @@ const Auth = (() => {
     }
 
     const headers = {};
+    // 环境 Header 先铺（登录接口通常也需要，如 x-current-project），登录请求自己的 Header 覆盖
+    for (const h of env.headers || []) {
+      if (h.enabled === false || !h.key) continue;
+      const k = Vars.resolve(h.key, env);
+      if (k) headers[k] = Vars.resolve(h.value ?? '', env);
+    }
     for (const h of Vars.resolveItems(login.headers, env)) {
       if (h.key) headers[h.key] = h.value;
     }

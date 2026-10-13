@@ -435,6 +435,15 @@ const Editor = (() => {
         rows.push({ k: name, v: preview, injected: true });
       }
     }
+    // 环境 Header：该环境的所有请求自动携带（如 x-current-project）
+    if (env && Array.isArray(env.headers)) {
+      for (const h of env.headers) {
+        if (h.enabled === false || !h.key) continue;
+        const k = Vars.resolve(h.key, env);
+        if (!k) continue;
+        rows.push({ k, v: Vars.resolve(h.value ?? '', env), injected: true });
+      }
+    }
     rows.push({ k: 'User-Agent', v: 'ApiPilot/1.0.0' });
     rows.push({ k: 'Accept', v: '*/*' });
     rows.push({ k: 'Accept-Encoding', v: 'gzip, deflate, br' });

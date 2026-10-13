@@ -522,6 +522,7 @@ const Importer = (() => {
       _apipilotEnv: true,
       name: env.name,
       variables: env.variables || [],
+      headers: env.headers || [],
       login: env.login || null,
       // 导出包里不含运行时 Token（每次登录重新获取），避免凭据泄漏
       exportedAt: new Date().toISOString()
@@ -542,6 +543,11 @@ const Importer = (() => {
       variables: Array.isArray(e.variables)
         ? e.variables.map((v) => ({
           key: v.key || '', value: v.value || '', desc: v.desc || '', enabled: v.enabled !== false
+        }))
+        : [],
+      headers: Array.isArray(e.headers)
+        ? e.headers.map((h) => ({
+          key: h.key || '', value: h.value || '', enabled: h.enabled !== false
         }))
         : [],
       login,

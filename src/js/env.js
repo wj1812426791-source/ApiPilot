@@ -170,10 +170,19 @@ const Env = (() => {
     pane.appendChild(table);
     Editor.renderKV(table, env.variables, { kPlaceholder: '变量名', vPlaceholder: '值' }, () => Store.save());
 
-    pane.appendChild(U.el('div', { class: 'panel-caption mt', text: '全局变量（所有环境共用）' }));
-    const gt = U.el('div', { class: 'kv-table' });
-    pane.appendChild(gt);
-    Editor.renderKV(gt, Store.state.globals, { kPlaceholder: '变量名', vPlaceholder: '值' }, () => Store.save());
+    pane.appendChild(U.el('div', { class: 'panel-caption mt', text: '环境 Header（该环境的所有请求自动携带，如 x-current-project）' }));
+    const ht = U.el('div', { class: 'kv-table' });
+    pane.appendChild(ht);
+    if (!Array.isArray(env.headers)) env.headers = [];
+    Editor.renderKV(ht, env.headers, { desc: false, kPlaceholder: 'Header 名', vPlaceholder: '值' }, () => {
+      Store.save();
+      Editor.renderAutoHeaders();
+    });
+    pane.appendChild(U.el('div', {
+      class: 'hint', style: 'margin-top:-4px',
+      html: '这里填该环境需要额外携带的请求头（值也支持 <code>{{变量名}}</code>）。发送时自动带上；' +
+        '若某个请求自己在「Headers」里写了同名 Header，以请求里的为准。'
+    }));
 
     pane.appendChild(U.el('div', {
       class: 'hint', style: 'margin-top:14px',

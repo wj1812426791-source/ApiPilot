@@ -37,11 +37,24 @@ const Http = (() => {
       holder.url = 'http://' + holder.url.replace(/^\/+/, '');
     }
 
-    // 2) Headers
+    // 2) Headers：先铺「环境 Header」（该环境所有请求自动携带），再用请求自己的 Header 覆盖
     const headers = {};
+    const envHeaderNames = [];
+    if (env && Array.isArray(env.headers)) {
+      for (const h of env.headers) {
+        if (h.enabled === false || !h.key) continue;
+        const k = Vars.resolve(h.key, env, ctx);
+        if (!k) continue;
+        headers[k] = Vars.resolve(h.value ?? '', env, ctx);
+        envHeaderNames.push(k);
+      }
+    }
     for (const h of req.headers || []) {
       if (h.enabled === false || !h.key) continue;
       headers[Vars.resolve(h.key, env, ctx)] = Vars.resolve(h.value ?? '', env, ctx);
+    }
+    for (const k of envHeaderNames) {
+      if (headers[k] !== undefined) notes.push(`${k}: 由环境「${env.name}」自动携带`);
     }
 
     // 3) 认证

@@ -35,6 +35,8 @@ const Store = (() => {
       variables: [
         { key: 'baseUrl', value: 'http://localhost:8080', desc: '服务地址', enabled: true }
       ],
+      // 环境 Header：该环境下的所有请求都会自动携带（如 x-current-project）
+      headers: [],
       login: DEFAULT_LOGIN(),
       token: DEFAULT_TOKEN()
     };
@@ -145,6 +147,7 @@ const Store = (() => {
       state.collections = data.collections || [];
       state.environments = (data.environments || []).map((e) => ({
         ...e,
+        headers: Array.isArray(e.headers) ? e.headers : [],
         login: { ...DEFAULT_LOGIN(), ...(e.login || {}) },
         token: { ...DEFAULT_TOKEN(), ...(e.token || {}) }
       }));
