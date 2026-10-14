@@ -158,6 +158,130 @@ const U = (() => {
   }
 
   /* ---------------------------------------------------------------
+     宽松 JSON 解析：容错 BOM / JSONP 包裹 / 防劫持前缀
+     --------------------------------------------------------------- */
+  function tryParseJSONLoose(text) {
+    const rawText = String(text ?? '');
+    if (!rawText.trim()) return { ok: false, notes: [] };
+    const notes = [];
+    let t = rawText.replace(/^\uFEFF/, '').trim();
+
+    // 防 JSON 劫持前缀：while(1); / for(;;); / )]}',
+    const guard = /^(?:while\s*\(\s*1\s*\)\s*;|for\s*\(\s*;\s*;\s*\)\s*;|\)\]\}',?)\s*/.exec(t);
+    if (guard) { t = t.slice(guard[0].length).trim(); notes.push('已去掉防劫持前缀'); }
+
+    const p1 = tryParseJSON(t);
+    if (p1.ok) return { ok: true, value: p1.value, notes };
+
+    // JSONP 包裹：callback({ ... })
+    const jsonp = /^[A-Za-z_$][\w$.]*\s*\(\s*([\s\S]*?)\s*\)\s*;?\s*$/.exec(t);
+    if (jsonp) {
+      const p2 = tryParseJSON(jsonp[1]);
+      if (p2.ok) { notes.push('已去掉 JSONP 回调包裹'); return { ok: true, value: p2.value, notes }; }
+    }
+    return { ok: false, error: p1.error || '不是合法 JSON', notes };
+  }
+
+  /** 把 {{变量}} 换成不含特殊字符的序号占位，解析完再还原（变量名可含 _ . - 等任意字符） */
+  function maskVars(text) {
+    const names = [];
+    const masked = String(text ?? '').replace(/\{\{([^}]+)\}\}/g, (_m, n) => {
+      names.push(String(n).trim());
+      return '__APV' + (names.length - 1) + '__';
+    });
+    return { masked, names };
+  }
+
+  function unmaskVars(text, names) {
+    if (!names || !names.length) return String(text ?? '');
+    return String(text ?? '').replace(/__APV(\d+)__/g, (m, i) => {
+      const n = names[Number(i)];
+      return n === undefined ? m : '{{' + n + '}}';
+    });
+  }
+
+  /* ---------------------------------------------------------------
+     表单 / 查询串：k=v&k=v
+     --------------------------------------------------------------- */
+  function decodeFormPart(s) {
+    try { return decodeURIComponent(String(s).replace(/\+/g, ' ')); }
+    catch (_) { return String(s); }
+  }
+
+  /** 是否像表单或查询串（≥2 对 k=v；纯 URL / JSON / XML 不算） */
+  function looksLikeForm(text) {
+    if (typeof text !== 'string') return false;
+    let t = text.trim();
+    if (!t) return false;
+    // 完整 URL、JSON、XML 先排除
+    if (/^[a-zA-Z][\w+.-]*:\/\//.test(t)) return false;
+    if (/^[[{]/.test(t) || /^</.test(t)) return false;
+    if (t.startsWith('?')) t = t.slice(1);
+    if (!/^[^=&\s]+=/.test(t)) return false;
+    if (!t.includes('&')) return false;
+    const pairs = t.split('&').filter((p) => p !== '');
+    if (pairs.length < 2) return false;
+    // 每一对都必须是 k=v 或裸 key
+    return pairs.every((p) => /^[^=&\s]*=/.test(p) || /^[^=&\s]+$/.test(p));
+  }
+
+  /** 解析表单串 → [{key, value, rawKey, rawVal, changed}]（值已 URL 解码） */
+  function parseForm(text) {
+    let t = String(text ?? '').trim();
+    if (t.startsWith('?')) t = t.slice(1);
+    return t.split('&').filter((p) => p !== '').map((pair) => {
+      const i = pair.indexOf('=');
+      const rawKey = i < 0 ? pair : pair.slice(0, i);
+      const rawVal = i < 0 ? '' : pair.slice(i + 1);
+      const key = decodeFormPart(rawKey);
+      const value = decodeFormPart(rawVal);
+      return { key, value, rawKey, rawVal, changed: value !== rawVal };
+    });
+  }
+
+  /** 表单串 → 对齐的「key = value」，一行一个参数 */
+  function formatForm(text, { annotateRaw = true } = {}) {
+    const items = parseForm(text);
+    if (!items.length) return '';
+    const w = Math.max(...items.map((i) => i.key.length));
+    return items.map((it) => {
+      const pad = ' '.repeat(Math.max(0, w - it.key.length));
+      const note = it.value === ''
+        ? '   ← 空值'
+        : (annotateRaw && it.changed ? `   ← 原始: ${it.rawVal}` : '');
+      return `${it.key}${pad} = ${it.value}${note}`;
+    }).join('\n');
+  }
+
+  /* ---------------------------------------------------------------
+     智能美化：自动识别 JSON / 表单·查询串 / XML
+     --------------------------------------------------------------- */
+  function smartFormat(text) {
+    const s = String(text ?? '');
+    const t = s.trim();
+    if (!t) return { ok: false, kind: 'none', error: '内容为空' };
+
+    // 1) JSON（容错 BOM / JSONP / 防劫持前缀，且保留 {{变量}}）
+    const { masked, names } = maskVars(t);
+    const j = tryParseJSONLoose(masked);
+    if (j.ok) {
+      const out = unmaskVars(JSON.stringify(j.value, null, 2), names);
+      return { ok: true, kind: 'json', text: out, notes: j.notes };
+    }
+
+    // 2) 表单 / 查询串
+    if (looksLikeForm(t)) {
+      const items = parseForm(t);
+      return { ok: true, kind: 'form', text: formatForm(t), count: items.length, items };
+    }
+
+    // 3) XML / HTML
+    if (/^<[!?a-zA-Z]/.test(t)) return { ok: true, kind: 'xml', text: formatXML(t) };
+
+    return { ok: false, kind: 'text', error: j.error || '不能识别的格式（不是 JSON、表单参数或 XML）' };
+  }
+
+  /* ---------------------------------------------------------------
      剪贴板
      --------------------------------------------------------------- */
   async function copy(text) {
@@ -230,6 +354,8 @@ const U = (() => {
     getByPath, findDeep,
     fmtBytes, fmtTime, fmtDateTime, fmtRelative,
     tryParseJSON, highlightJSON, formatXML,
+    tryParseJSONLoose, maskVars, unmaskVars,
+    looksLikeForm, parseForm, formatForm, smartFormat,
     copy, splitUrl, parseQuery, buildQuery, methodClass, cartesian
   };
 })();

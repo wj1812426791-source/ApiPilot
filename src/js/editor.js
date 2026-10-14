@@ -877,25 +877,48 @@ const Editor = (() => {
     U.$('#btnFormatBody').addEventListener('click', () => {
       const req = currentReq();
       if (!req) return;
-      const parsed = U.tryParseJSON(req.body.raw || '');
-      if (!parsed.ok) {
-        // 含变量的 JSON 先做占位再格式化
-        const masked = (req.body.raw || '').replace(/\{\{([^}]+)\}\}/g, '__VAR_$1__');
-        const p2 = U.tryParseJSON(masked);
-        if (p2.ok) {
-          const out = JSON.stringify(p2.value, null, 2).replace(/__VAR_([^"_]+)__/g, '{{$1}}');
-          req.body.raw = out;
-          U.$('#rawBody').value = out;
-          markDirty();
-          return;
-        }
-        UI.toast('不是合法 JSON，无法美化：' + (parsed.error || ''), 'warn', 3200);
+      const b = req.body || {};
+      const mode = b.mode || 'none';
+
+      if (mode === 'urlencoded' || mode === 'formdata') {
+        UI.toast('参数表本身就是美化后的形式；要压缩回一行可切到 raw', 'warn', 3200);
         return;
       }
-      const out = JSON.stringify(parsed.value, null, 2);
-      req.body.raw = out;
-      U.$('#rawBody').value = out;
+      if (mode !== 'raw') {
+        UI.toast('这个请求没有 Body 可美化', 'warn', 2200);
+        return;
+      }
+
+      const raw = b.raw || '';
+      if (!raw.trim()) { UI.toast('Body 是空的，没什么可美化', 'warn', 2200); return; }
+
+      // 1) 表单 / 查询串（k=v&k=v）→ 转成 x-www-form-urlencoded 参数表
+      //    多行表单在部分服务端会被当成一个值，所以这里不写回 raw，而是切成参数表（原始 raw 保留，可切回 raw 还原）
+      if (U.looksLikeForm(raw)) {
+        const items = U.parseForm(raw).map((i) => ({ key: i.key, value: i.value, desc: '', enabled: true }));
+        if (items.length >= 2) {
+          b.urlencoded = items;
+          b.mode = 'urlencoded';
+          renderBody();
+          markDirty();
+          UI.toast(`已按表单美化：转为参数表（${items.length} 项）；原始内容仍保留在 raw 里`, 'ok', 4000);
+          return;
+        }
+      }
+
+      // 2) 智能美化：JSON（容错 BOM/JSONP/防劫持前缀，支持含 {{变量}} 的 JSON）、XML
+      const fmt = U.smartFormat(raw);
+      if (!fmt.ok) {
+        UI.toast('无法美化：' + (fmt.error || '不能识别的格式'), 'warn', 3600);
+        return;
+      }
+      b.raw = fmt.text;
+      U.$('#rawBody').value = fmt.text;
       markDirty();
+
+      const label = { json: 'JSON', xml: 'XML', form: '表单参数' }[fmt.kind] || fmt.kind;
+      const extra = (fmt.notes && fmt.notes.length) ? '（' + fmt.notes.join('、') + '）' : '';
+      UI.toast(`已按 ${label} 美化${extra}`, 'ok', 2400);
     });
 
     const bindSetting = (id, key, isNum) => {

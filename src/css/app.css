@@ -993,3 +993,15 @@ pre.code.nowrap { white-space: pre; }
 }
 .sr-warn-sub { margin-top: 3px; color: #a32218; opacity: .85; font-size: 11.5px; }
 .sr-hint { margin-top: 10px; font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
+
+/* ============ 智能美化：表单参数 / JSON 容错提示 ============ */
+.res-note {
+  margin: 0 0 8px; padding: 5px 10px; border-radius: 4px; font-size: 11.5px;
+  background: #f4f6f8; color: var(--text-2); border: 1px solid var(--border);
+}
+.kv-view td.kv-k { font-family: var(--mono); color: var(--tok-key, #8250df); white-space: nowrap; vertical-align: top; }
+.kv-view td { vertical-align: top; word-break: break-all; }
+.kv-raw {
+  margin-left: 8px; padding: 0 5px; border-radius: 3px; font-family: var(--mono);
+  font-size: 10.5px; color: var(--text-3); background: var(--bg-2); border: 1px solid var(--border);
+}

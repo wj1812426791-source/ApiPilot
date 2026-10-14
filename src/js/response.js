@@ -178,11 +178,26 @@ const Response = (() => {
     } else if (compact) {
       wrap.appendChild(U.el('pre', { class: 'code sr-body', text: bp.length > 2000 ? bp.slice(0, 2000) + '\n…（已截断，切「实际发出」看全部）' : bp }));
     } else {
-      const isJson = (s.body.contentType || '').includes('json') || (() => { try { JSON.parse(bp); return true; } catch (_) { return false; } })();
-      wrap.appendChild(U.el('pre', { class: 'code', html: isJson && bp.length < 200000 ? U.highlightJSON(JSON.parse(bp)) : U.escapeHtml(bp) }));
+      wrap.appendChild(bodyNode(bp, s.body));
     }
 
     return wrap;
+  }
+
+  /** 「实际发出」里的请求体展示：JSON 高亮 / 表单分行解码 / 其它按原样 */
+  function bodyNode(bp, body) {
+    const ct = (body && body.contentType) || '';
+    const isJson = ct.includes('json') || (() => { try { JSON.parse(bp); return true; } catch (_) { return false; } })();
+    if (isJson && bp.length < 200000) {
+      try { return U.el('pre', { class: 'code', html: U.highlightJSON(JSON.parse(bp)) }); } catch (_) { /* 落到下面的分支 */ }
+    }
+    if (U.looksLikeForm(bp)) {
+      return U.el('div', {}, [
+        U.el('div', { class: 'sr-empty', text: `表单参数 · 已 URL 解码，共 ${U.parseForm(bp).length} 项` }),
+        U.el('pre', { class: 'code', text: U.formatForm(bp) })
+      ]);
+    }
+    return U.el('pre', { class: 'code', text: bp });
   }
 
   function show(res, meta, tab) {
@@ -304,20 +319,29 @@ const Response = (() => {
     }
 
     // Pretty
-    const parsed = U.tryParseJSON(text);
-    if (parsed.ok) {
+    const loose = U.tryParseJSONLoose(text);
+    if (loose.ok) {
+      if (loose.notes && loose.notes.length) {
+        content.appendChild(U.el('div', { class: 'res-note', text: loose.notes.join('、') }));
+      }
       if (filterPath) {
         // 1) 先按精确路径查（如 data.list.0.name）→ 只显示该子树
-        const picked = U.getByPath(parsed.value, filterPath);
+        const picked = U.getByPath(loose.value, filterPath);
         if (picked !== undefined) {
           content.appendChild(U.el('pre', { class: 'code', html: U.highlightJSON(picked) }));
           return;
         }
         // 2) 不是精确路径 → 退化成模糊查询（键名/值包含关键字即命中）
-        renderFuzzyHits(content, fuzzyFind(parsed.value, filterPath), filterPath);
+        renderFuzzyHits(content, fuzzyFind(loose.value, filterPath), filterPath);
         return;
       }
-      content.appendChild(U.el('pre', { class: 'code', html: U.highlightJSON(parsed.value) }));
+      content.appendChild(U.el('pre', { class: 'code', html: U.highlightJSON(loose.value) }));
+      return;
+    }
+
+    // 表单 / 查询串（x-www-form-urlencoded、URL 的 query）：按参数表展示并自动解码
+    if (U.looksLikeForm(text)) {
+      renderFormParams(content, text, filterPath);
       return;
     }
 
@@ -337,6 +361,37 @@ const Response = (() => {
       }
     }
     content.appendChild(U.el('pre', { class: 'code', text: raw }));
+  }
+
+  /** 表单 / 查询串 → 参数表（自动 URL 解码，标出原始编码值） */
+  function renderFormParams(content, text, filter) {
+    const all = U.parseForm(text);
+    const q = String(filter || '').toLowerCase();
+    const items = q
+      ? all.filter((i) => i.key.toLowerCase().includes(q) || i.value.toLowerCase().includes(q))
+      : all;
+
+    content.appendChild(U.el('div', { class: 'fuzzy-head' }, [
+      U.el('b', { text: q ? `表单参数中匹配「${filter}」` : '表单参数（x-www-form-urlencoded / 查询串）' }),
+      U.el('span', { class: 'fuzzy-sub', text: q ? ` ${items.length} / ${all.length} 项` : ` 共 ${all.length} 项 · 已自动 URL 解码` })
+    ]));
+
+    if (!items.length) {
+      content.appendChild(U.el('div', { class: 'res-placeholder' }, [U.el('p', { text: '没有匹配的参数' })]));
+      return;
+    }
+
+    const table = U.el('table', { class: 'h-table kv-view' });
+    for (const it of items) {
+      table.appendChild(U.el('tr', {}, [
+        U.el('td', { class: 'kv-k', html: highlightQuery(it.key, filter) }),
+        U.el('td', {}, [
+          U.el('span', { html: highlightQuery(it.value === '' ? '(空值)' : it.value, filter) }),
+          it.changed ? U.el('span', { class: 'kv-raw', text: '原始: ' + it.rawVal }) : null
+        ])
+      ]));
+    }
+    content.appendChild(table);
   }
 
   /* ==================================================================
