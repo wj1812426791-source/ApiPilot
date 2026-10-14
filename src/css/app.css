@@ -188,6 +188,12 @@ input, select, textarea { outline: none; }
 .node-row.selected::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--orange);
 }
+/* 键盘复制/粘贴的目标节点（点选即选中） */
+.node-row.kb-sel { background: var(--active); }
+.node-row.kb-sel::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  border: 1px dashed var(--orange); border-radius: 3px;
+}
 .node-caret {
   width: 14px; height: 14px; flex: none; display: inline-flex;
   align-items: center; justify-content: center; color: var(--text-3);
@@ -817,6 +823,10 @@ pre.code.nowrap { white-space: pre; }
 .ctx-item:hover { background: var(--hover); }
 .ctx-item.danger { color: var(--red); }
 .ctx-item.danger:hover { background: #fdeceb; }
+.ctx-item.disabled,
+.ctx-item:disabled { opacity: .42; cursor: default; }
+.ctx-item.disabled:hover,
+.ctx-item:disabled:hover { background: transparent; }
 .ctx-item .sc { font-size: 11px; color: var(--text-3); }
 .ctx-sep { height: 1px; background: var(--border); margin: 4px 2px; }
 

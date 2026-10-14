@@ -112,13 +112,19 @@ const UI = (() => {
         menu.appendChild(U.el('div', { class: 'ctx-sep' }));
         continue;
       }
-      menu.appendChild(U.el('button', {
-        class: 'ctx-item' + (item.danger ? ' danger' : ''),
-        onClick: () => { hideContext(); item.action && item.action(); }
+      const btn = U.el('button', {
+        class: 'ctx-item' + (item.danger ? ' danger' : '') + (item.disabled ? ' disabled' : ''),
+        disabled: item.disabled ? 'disabled' : null,
+        onClick: () => {
+          if (item.disabled) return;          // 禁用项点了不关闭菜单，也不执行
+          hideContext();
+          item.action && item.action();
+        }
       }, [
         U.el('span', { text: item.label }),
         item.shortcut ? U.el('span', { class: 'sc', text: item.shortcut }) : null
-      ]));
+      ]);
+      menu.appendChild(btn);
     }
     menu.hidden = false;
     // 边界修正

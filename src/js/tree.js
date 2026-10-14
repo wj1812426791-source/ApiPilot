@@ -6,6 +6,24 @@ const Tree = (() => {
   let filterText = '';
   let dragSrcId = null;
 
+  // 复制/粘贴：会话内剪贴板（存深拷贝，不含运行态）
+  let clipboard = null;
+  // 键盘复制/粘贴的目标节点（点选集合树任意节点即选中）
+  let selectedId = null;
+
+  const isContainer = (node) => !!node && node.type !== 'request';
+
+  /** 深拷贝并重新分配 id（避免与源节点 id 冲突；文件夹会递归） */
+  function cloneWithNewIds(src) {
+    const copy = U.clone(src);
+    const reId = (n) => {
+      n.id = U.uid(n.type === 'request' ? 'req' : n.type === 'folder' ? 'fld' : 'col');
+      (n.items || []).forEach(reId);
+    };
+    reId(copy);
+    return copy;
+  }
+
   const caretSvg = '<svg viewBox="0 0 12 12" width="10" height="10"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const folderSvg = '<svg viewBox="0 0 14 14" width="13" height="13" style="flex:none;color:#8a8a8a"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.2c.4 0 .8.2 1.1.5l.6.7h4.1A1.5 1.5 0 0 1 12 4.7v5.8A1.5 1.5 0 0 1 10.5 12h-8A1.5 1.5 0 0 1 1 10.5z" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>';
   const clockSvg = '<svg viewBox="0 0 14 14" width="10" height="10"><circle cx="7" cy="7" r="5.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 3.6V7l2.6 1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
@@ -38,7 +56,9 @@ const Tree = (() => {
     );
 
     const row = U.el('div', {
-      class: 'node-row' + (node.type === 'collection' ? ' is-collection' : '') + (isOpenTab ? ' selected' : ''),
+      class: 'node-row' + (node.type === 'collection' ? ' is-collection' : '')
+        + (isOpenTab ? ' selected' : '')
+        + (selectedId === node.id ? ' kb-sel' : ''),
       style: `padding-left:${8 + depth * 13}px`,
       draggable: 'true',
       dataset: { id: node.id },
@@ -105,6 +125,7 @@ const Tree = (() => {
     row.appendChild(acts);
 
     row.addEventListener('click', () => {
+      select(node.id);
       if (isLeaf) Editor.openRequest(node.id);
       else { node.expanded = !node.expanded; Store.save(); render(); }
     });
@@ -112,6 +133,7 @@ const Tree = (() => {
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      select(node.id);
       showMenu(node, e.clientX, e.clientY);
     });
 
@@ -176,11 +198,90 @@ const Tree = (() => {
   }
 
   /* --------------------------- 菜单动作 --------------------------- */
+
+  /** 选中集合树某个节点（仅高亮，供 Ctrl+C / Ctrl+V 定位目标） */
+  function select(id) {
+    selectedId = id;
+    const box = U.$('#tree');
+    if (!box) return;
+    U.$$('.node-row', box).forEach((r) => r.classList.toggle('kb-sel', r.dataset.id === id));
+  }
+
+  function getSelected() {
+    if (!selectedId) return null;
+    return Store.findNode(selectedId) ? Store.findNode(selectedId).node : null;
+  }
+
+  /** 复制请求 / 文件夹（请求取编辑区最新草稿，避免复制到未保存的旧数据） */
+  function copyNode(node) {
+    if (!node) return false;
+    const src = node.type === 'request' ? (Editor.liveReq(node) || node) : node;
+    clipboard = { kind: src.type, name: src.name || '', data: U.clone(src) };
+    UI.toast(`已复制${src.type === 'request' ? '请求' : '文件夹'}「${src.name || '未命名'}」，在目标集合右键或按 Ctrl+V 粘贴`, 'ok', 2800);
+    return true;
+  }
+
+  /** 把剪贴板内容粘贴到目标节点（集合/文件夹 → 粘贴到其内部；请求 → 粘贴为其同级下一项） */
+  function pasteTo(target) {
+    if (!clipboard) { UI.toast('剪贴板是空的，先复制一个请求（Ctrl+C）', 'warn', 2600); return null; }
+    if (!target) { UI.toast('请先在集合树里点选要粘贴到的集合或请求', 'warn', 2600); return null; }
+
+    const copy = cloneWithNewIds(clipboard.data);
+
+    if (target.type === 'request') {
+      const hit = Store.findNode(target.id);
+      if (!hit) return null;
+      hit.siblings.splice(hit.index + 1, 0, copy);
+      // 粘贴到请求旁边时，展开它的父级容器，保证能看到
+      const parent = Store.findNode(target.id).parent;
+      if (parent) parent.expanded = true;
+    } else {
+      target.items = target.items || [];
+      target.items.push(copy);
+      target.expanded = true;
+    }
+
+    Store.save();
+    render();
+    select(copy.id);
+
+    const where = target.type === 'request' ? `「${target.name || '未命名'}」之后` : `「${target.name || '未命名'}」`;
+    UI.toast(`已粘贴${copy.type === 'request' ? '请求' : '文件夹'}「${copy.name || '未命名'}」到 ${where}`, 'ok', 2400);
+    return copy;
+  }
+
+  /** Ctrl+C：复制当前选中节点 */
+  function copySelected() {
+    const node = getSelected();
+    if (!node) { UI.toast('先在集合树里点选一个请求或文件夹，再按 Ctrl+C', 'warn', 2600); return false; }
+    return copyNode(node);
+  }
+
+  /** Ctrl+V：粘贴到当前选中节点 */
+  function pasteSelected() {
+    const node = getSelected();
+    if (!node) { UI.toast('先在集合树里点选要粘贴到的集合或请求，再按 Ctrl+V', 'warn', 2600); return false; }
+    return !!pasteTo(node);
+  }
+
+  const hasClipboard = () => !!clipboard;
+
   function showMenu(node, x, y) {
     const items = [];
-    if (node.type !== 'request') {
+    const isReq = node.type === 'request';
+
+    if (!isReq) {
       items.push({ label: '新建请求', action: () => addRequest(node) });
       items.push({ label: '新建文件夹', action: () => addFolder(node) });
+      items.push('-');
+      items.push({
+        label: '粘贴', shortcut: 'Ctrl+V', disabled: !clipboard,
+        action: () => pasteTo(node)
+      });
+      items.push({
+        label: node.type === 'collection' ? '复制集合' : '复制文件夹', shortcut: 'Ctrl+C',
+        action: () => copyNode(node)
+      });
       items.push('-');
     } else {
       items.push({ label: '打开', action: () => Editor.openRequest(node.id) });
@@ -203,13 +304,19 @@ const Tree = (() => {
         }
       });
       items.push({ label: '导出请求…', action: () => Importer.exportRequest(Editor.liveReq(node) || node) });
+      items.push('-');
+      items.push({ label: '复制请求', shortcut: 'Ctrl+C', action: () => copyNode(node) });
+      items.push({
+        label: '粘贴到它后面', shortcut: 'Ctrl+V', disabled: !clipboard,
+        action: () => pasteTo(node)
+      });
+      items.push('-');
       if (node.schedule && node.schedule.enabled) {
         items.push({
           label: '取消定时任务', danger: true,
           action: () => { Scheduler.cancel(node.id); UI.toast('已取消定时任务', 'ok'); }
         });
       }
-      items.push('-');
     }
     items.push({ label: '重命名', action: () => rename(node) });
     items.push({ label: '创建副本', action: () => duplicate(node) });
@@ -264,12 +371,7 @@ const Tree = (() => {
   function duplicate(node) {
     // 请求：若有编辑区未保存的修改，副本按最新内容生成
     const src = node.type === 'request' ? (Editor.liveReq(node) || node) : node;
-    const copy = U.clone(src);
-    const reId = (n) => {
-      n.id = U.uid(n.type === 'request' ? 'req' : n.type === 'folder' ? 'fld' : 'col');
-      (n.items || []).forEach(reId);
-    };
-    reId(copy);
+    const copy = cloneWithNewIds(src);
     copy.name = (src.name || node.name || '未命名') + ' 副本';
     if (node.type === 'collection') {
       Store.state.collections.push(copy);
@@ -361,5 +463,8 @@ const Tree = (() => {
     ]));
   }
 
-  return { render, renderHistory, setFilter, newCollection, addRequest, addFolder };
+  return {
+    render, renderHistory, setFilter, newCollection, addRequest, addFolder,
+    select, getSelected, copyNode, pasteTo, copySelected, pasteSelected, hasClipboard
+  };
 })();

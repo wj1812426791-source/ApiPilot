@@ -77,6 +77,13 @@ const App = (() => {
   }
 
   /* --------------------------- 快捷键 --------------------------- */
+  /** 焦点是否在可编辑元素里（输入框/文本域）：是的话不劫持 Ctrl+C / Ctrl+V */
+  function isEditable(node) {
+    if (!node) return false;
+    const tag = (node.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || node.isContentEditable === true;
+  }
+
   function bindShortcuts() {
     document.addEventListener('keydown', (e) => {
       const ctrl = e.ctrlKey || e.metaKey;
@@ -98,6 +105,25 @@ const App = (() => {
       } else if (k === 'e') { e.preventDefault(); Env.openManager(); }
       else if (k === 'l') { e.preventDefault(); U.$('#urlInput').select(); }
       else if (k === 'f') { e.preventDefault(); U.$('#sideSearch').focus(); }
+      else if (k === 'c') {
+        // 焦点在输入框/文本域里时保留原生文本复制
+        if (isEditable(e.target)) return;
+        const node = Tree.getSelected();
+        if (!node) return;
+        e.preventDefault();
+        Tree.copyNode(node);
+      }
+      else if (k === 'v') {
+        if (isEditable(e.target)) return;
+        const node = Tree.getSelected();
+        if (!node) return;
+        e.preventDefault();
+        if (!Tree.hasClipboard()) {
+          UI.toast('剪贴板是空的，先点选要复制的请求按 Ctrl+C', 'warn', 2400);
+          return;
+        }
+        Tree.pasteTo(node);
+      }
       else if (k === 'tab') {
         e.preventDefault();
         const tabs = Store.state.tabs;
@@ -231,6 +257,8 @@ const App = (() => {
       row2('Ctrl + E', '打开环境管理');
       row2('Ctrl + L', '选中地址栏');
       row2('Ctrl + F', '搜索集合');
+      row2('Ctrl + C', '复制选中的请求/文件夹');
+      row2('Ctrl + V', '粘贴到选中的集合/请求');
       row2('Ctrl + Tab', '切换标签页');
       body.appendChild(t2);
 
