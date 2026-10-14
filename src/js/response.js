@@ -120,25 +120,127 @@ const Response = (() => {
     // Pretty
     const parsed = U.tryParseJSON(text);
     if (parsed.ok) {
-      let value = parsed.value;
       if (filterPath) {
-        const picked = U.getByPath(value, filterPath);
-        if (picked === undefined) {
-          content.appendChild(U.el('div', { class: 'res-placeholder' }, [U.el('p', { text: `路径 ${filterPath} 没有匹配到内容` })]));
+        // 1) 先按精确路径查（如 data.list.0.name）→ 只显示该子树
+        const picked = U.getByPath(parsed.value, filterPath);
+        if (picked !== undefined) {
+          content.appendChild(U.el('pre', { class: 'code', html: U.highlightJSON(picked) }));
           return;
         }
-        value = picked;
+        // 2) 不是精确路径 → 退化成模糊查询（键名/值包含关键字即命中）
+        renderFuzzyHits(content, fuzzyFind(parsed.value, filterPath), filterPath);
+        return;
       }
-      content.appendChild(U.el('pre', { class: 'code', html: U.highlightJSON(value) }));
+      content.appendChild(U.el('pre', { class: 'code', html: U.highlightJSON(parsed.value) }));
       return;
     }
 
+    // 非 JSON：按「包含关键字的行」模糊过滤
     const ct = (res.headers['content-type'] || '').toLowerCase();
-    if (ct.includes('xml') || ct.includes('html')) {
-      content.appendChild(U.el('pre', { class: 'code', text: U.formatXML(text) }));
+    const raw = (ct.includes('xml') || ct.includes('html')) ? U.formatXML(text) : text;
+    if (filterPath) {
+      const q = filterPath.toLowerCase();
+      const hitLines = String(raw).split('\n').filter((l) => l.toLowerCase().includes(q));
+      if (hitLines.length) {
+        content.appendChild(U.el('div', { class: 'fuzzy-head' }, [
+          U.el('b', { text: `包含「${filterPath}」的行` }),
+          U.el('span', { class: 'fuzzy-sub', text: ` 共 ${hitLines.length} 行` })
+        ]));
+        content.appendChild(U.el('pre', { class: 'code', text: hitLines.join('\n') }));
+        return;
+      }
+    }
+    content.appendChild(U.el('pre', { class: 'code', text: raw }));
+  }
+
+  /* ==================================================================
+     Body 模糊查询：键名 / 值包含关键字即命中（不区分大小写）
+     ================================================================== */
+  const FUZZY_LIMIT = 300;
+
+  function fuzzyFind(root, query) {
+    const q = String(query || '').toLowerCase();
+    const hits = [];
+    if (!q) return hits;
+    const seen = new Set();
+
+    const push = (p, value) => {
+      if (hits.length >= FUZZY_LIMIT || !p || seen.has(p)) return;
+      seen.add(p);
+      hits.push({ path: p, value });
+    };
+
+    const walkNode = (node, path) => {
+      if (hits.length >= FUZZY_LIMIT || node === null || node === undefined) return;
+      if (Array.isArray(node)) {
+        node.forEach((v, i) => walkNode(v, path ? `${path}.${i}` : String(i)));
+        return;
+      }
+      if (typeof node === 'object') {
+        for (const k of Object.keys(node)) {
+          const p = path ? `${path}.${k}` : k;
+          // 键名命中，或完整路径命中（支持输入 list.0.name 这种片段路径）
+          if (k.toLowerCase().includes(q) || p.toLowerCase().includes(q)) push(p, node[k]);
+          walkNode(node[k], p);
+        }
+        return;
+      }
+      if (String(node).toLowerCase().includes(q)) push(path, node);
+    };
+
+    walkNode(root, '');
+    return hits;
+  }
+
+  function previewValue(v) {
+    if (v === null) return 'null';
+    if (v === undefined) return 'undefined';
+    if (Array.isArray(v)) return `[数组 · ${v.length} 项]`;
+    if (typeof v === 'object') return `{对象 · ${Object.keys(v).length} 个字段}`;
+    const s = String(v);
+    return s.length > 140 ? s.slice(0, 140) + '…' : s;
+  }
+
+  function highlightQuery(text, query) {
+    const esc = U.escapeHtml(text);
+    const q = U.escapeHtml(String(query || ''));
+    if (!q) return esc;
+    const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    return esc.replace(re, (m) => `<mark>${m}</mark>`);
+  }
+
+  function renderFuzzyHits(content, hits, query) {
+    if (!hits.length) {
+      content.appendChild(U.el('div', { class: 'res-placeholder' }, [
+        U.el('p', { text: `没有匹配「${query}」的内容（精确路径和模糊匹配都没命中）` })
+      ]));
       return;
     }
-    content.appendChild(U.el('pre', { class: 'code', text }));
+    content.appendChild(U.el('div', { class: 'fuzzy-head' }, [
+      U.el('b', { text: `模糊匹配「${query}」` }),
+      U.el('span', { class: 'fuzzy-sub', text: ` 共 ${hits.length} 处 · 点路径可精确定位` })
+    ]));
+
+    const list = U.el('div', { class: 'fuzzy-list' });
+    for (const h of hits) {
+      const row = U.el('div', { class: 'fuzzy-row', title: '点击定位到该路径' }, [
+        U.el('span', { class: 'fuzzy-path', html: highlightQuery(h.path, query) }),
+        U.el('span', { class: 'fuzzy-val', text: previewValue(h.value) })
+      ]);
+      row.addEventListener('click', () => {
+        filterPath = h.path;
+        const inp = U.$('#resFilter');
+        if (inp) inp.value = h.path;
+        const res = currentRes();
+        if (res) renderBody(res);
+      });
+      list.appendChild(row);
+    }
+    content.appendChild(list);
+
+    if (hits.length >= FUZZY_LIMIT) {
+      content.appendChild(U.el('div', { class: 'fuzzy-more', text: `只显示前 ${FUZZY_LIMIT} 处，输入更精确的关键字可缩小范围` }));
+    }
   }
 
   function renderHeaders(res) {
@@ -244,5 +346,5 @@ const Response = (() => {
     });
   }
 
-  return { show, restore, bind };
+  return { show, restore, bind, fuzzyFind, previewValue };
 })();
