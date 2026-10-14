@@ -69,6 +69,14 @@ const Tree = (() => {
 
     row.appendChild(U.el('span', { class: 'node-name', text: node.name || node.url || '未命名请求', title: node.url || node.name }));
 
+    // 未保存标记：编辑区改了但还没点「保存」，集合节点里还是旧数据
+    if (isLeaf && Editor.isDirty(node.id)) {
+      row.appendChild(U.el('span', {
+        class: 'dirty-dot',
+        title: '编辑区有未保存的修改（右键「复制为 cURL / 导出请求」会自动用编辑区的最新内容）'
+      }));
+    }
+
     // 定时任务徽标
     if (isLeaf && node.schedule && node.schedule.enabled) {
       const badge = U.el('span', {
@@ -178,17 +186,23 @@ const Tree = (() => {
       items.push({ label: '打开', action: () => Editor.openRequest(node.id) });
       items.push({
         label: node.schedule && node.schedule.enabled ? '定时任务（设置中）…' : '定时任务…',
-        action: () => Scheduler.open(node)
+        action: () => Scheduler.open(Editor.liveReq(node))
       });
       items.push({
         label: '复制为 cURL',
         action: async () => {
+          // 编辑区改的是草稿，集合节点要「保存」后才同步；这里取最新数据，避免复制出空内容
+          const live = Editor.liveReq(node) || node;
+          if (!(live.url || '').trim()) {
+            UI.toast('这个请求还没有 URL，复制出来是空的（先在编辑区填好 URL）', 'warn', 4000);
+            return;
+          }
           const env = Store.activeEnv();
-          await U.copy(Importer.toCurl(node, env));
-          UI.toast('已复制 cURL 到剪贴板', 'ok');
+          await U.copy(Importer.toCurl(live, env));
+          UI.toast(Editor.isDirty(node) ? '已复制 cURL（含编辑区未保存的修改）' : '已复制 cURL 到剪贴板', 'ok', 2400);
         }
       });
-      items.push({ label: '导出请求…', action: () => Importer.exportRequest(node) });
+      items.push({ label: '导出请求…', action: () => Importer.exportRequest(Editor.liveReq(node) || node) });
       if (node.schedule && node.schedule.enabled) {
         items.push({
           label: '取消定时任务', danger: true,
@@ -248,13 +262,15 @@ const Tree = (() => {
   }
 
   function duplicate(node) {
-    const copy = U.clone(node);
+    // 请求：若有编辑区未保存的修改，副本按最新内容生成
+    const src = node.type === 'request' ? (Editor.liveReq(node) || node) : node;
+    const copy = U.clone(src);
     const reId = (n) => {
       n.id = U.uid(n.type === 'request' ? 'req' : n.type === 'folder' ? 'fld' : 'col');
       (n.items || []).forEach(reId);
     };
     reId(copy);
-    copy.name = node.name + ' 副本';
+    copy.name = (src.name || node.name || '未命名') + ' 副本';
     if (node.type === 'collection') {
       Store.state.collections.push(copy);
     } else {

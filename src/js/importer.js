@@ -398,6 +398,9 @@ const Importer = (() => {
 
     const body = U.el('div', {}, [
       U.el('div', { class: 'panel-caption', text: '导出请求：' + (req.name || '未命名请求') }),
+      (req.url || '').trim()
+        ? null
+        : U.el('div', { class: 'hint', style: 'margin-bottom:8px', text: '注意：这个请求还没有 URL，导出的内容会是空的。' }),
       ...formats.map((f) => {
         const radio = U.el('input', { type: 'radio', name: 'expReqFmt', value: f.id });
         if (f.id === picked) radio.checked = true;

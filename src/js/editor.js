@@ -14,6 +14,30 @@ const Editor = (() => {
   const currentReq = () => { const t = current(); return t ? t.draft : null; };
   const currentRefId = () => { const t = current(); return t ? t.refId : null; };
 
+  /**
+   * 取请求的「最新数据」：
+   * 编辑器改的是标签页里的草稿（tab.draft），集合节点只有在点「保存」后才会同步。
+   * 所以右键菜单（复制为 cURL / 导出请求 / 定时任务 / 创建副本）必须走这里，
+   * 否则拿到的是没同步的旧节点，看起来就是「空的」。
+   */
+  function liveReq(idOrNode) {
+    const id = typeof idOrNode === 'string' ? idOrNode : (idOrNode && idOrNode.id);
+    const node = typeof idOrNode === 'string' ? (Store.findRequest(id) || null) : (idOrNode || null);
+    if (id) {
+      const tab = Store.state.tabs.find((t) => t.refId === id);
+      if (tab && tab.draft && tab.draft.type !== 'flow') return tab.draft;
+    }
+    return node;
+  }
+
+  /** 该请求是否有编辑区里未保存的修改 */
+  function isDirty(idOrNode) {
+    const id = typeof idOrNode === 'string' ? idOrNode : (idOrNode && idOrNode.id);
+    if (!id) return false;
+    const tab = Store.state.tabs.find((t) => t.refId === id);
+    return !!(tab && tab.dirty);
+  }
+
   function openRequest(refId) {
     const node = Store.findRequest(refId);
     if (!node) return;
@@ -890,6 +914,7 @@ const Editor = (() => {
   }
 
   return {
+    liveReq, isDirty,
     bind, renderKV, renderTabs, renderCurrent, renderAuth, renderAutoHeaders, syncUrlHighlight,
     openRequest, openFromHistory, newTab, closeTab, closeTabsByRef,
     current, currentReq, currentRefId, save, saveAs, send, markDirty, updateCounts

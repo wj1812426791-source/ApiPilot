@@ -204,6 +204,12 @@ input, select, textarea { outline: none; }
   width: 40px; text-align: right;
 }
 .node-actions { display: none; gap: 2px; flex: none; }
+
+/* 未保存标记（编辑区改了但没点「保存」） */
+.dirty-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--orange); flex: none; margin-left: 5px;
+}
 .node-row:hover .node-actions { display: flex; }
 .node-act {
   width: 20px; height: 20px; border-radius: 4px; color: var(--text-3);
