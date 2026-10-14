@@ -6,12 +6,197 @@ const Response = (() => {
   let viewMode = 'pretty';
   let filterPath = '';
 
+  // 「实际发出」快照（变量解析之后的真实请求），以及发送中的计时器
+  let currentSent = null;
+  let sendingAt = 0;
+  let sendingTimer = null;
+
+  function normalizeSent(built) {
+    if (!built) return null;
+    const cfg = built.config || {};
+    return {
+      method: cfg.method || 'GET',
+      url: cfg.url || '',
+      headers: cfg.headers || {},
+      body: cfg.body || { mode: 'none' },
+      notes: built.notes || [],
+      injected: built.injected || null,
+      vars: built.vars || [],
+      missing: built.missing || [],
+      at: Date.now()
+    };
+  }
+
+  function bodyPreviewText(body) {
+    const b = body || { mode: 'none' };
+    if (b.mode === 'raw') return b.text || '';
+    if (b.mode === 'urlencoded') {
+      return (b.items || []).map((i) => `${encodeURIComponent(i.key || '')}=${encodeURIComponent(i.value ?? '')}`).join('&');
+    }
+    if (b.mode === 'formdata') {
+      return (b.items || []).map((i) => `${i.key}=${i.value}${i.type === 'file' ? ' (文件)' : ''}`).join('\n');
+    }
+    return '';
+  }
+
+  /** 发送中：先在响应区把「实际发出」摊开，避免不知道发了什么 */
+  function showSending(tab, built) {
+    const snap = normalizeSent(built);
+    if (!snap) return;
+    currentSent = snap;
+    if (tab) tab.lastSent = snap;
+    sendingAt = snap.at;
+
+    const toolbar = U.$('#resBodyToolbar');
+    if (toolbar) toolbar.hidden = true;
+
+    renderMetaSending();
+    renderSendingBody();
+    renderRequest(null, {});   // 「实际发出」标签页同步填好
+    startTimer();
+  }
+
+  function startTimer() {
+    stopTimer();
+    sendingTimer = setInterval(() => {
+      const el = U.$('#sendingElapsed');
+      if (!el) return;
+      el.textContent = ((Date.now() - sendingAt) / 1000).toFixed(1) + 's';
+    }, 100);
+  }
+
+  function stopTimer() {
+    if (sendingTimer) { clearInterval(sendingTimer); sendingTimer = null; }
+  }
+
+  function endSending() { stopTimer(); }
+
+  function renderMetaSending() {
+    const box = U.$('#resMeta');
+    if (!box) return;
+    box.innerHTML = '';
+    box.appendChild(U.el('span', { class: 'm-item st-3', html: '<span class="spin"></span> <b>发送中…</b>' }));
+    const env = Store.activeEnv();
+    if (env) box.appendChild(U.el('span', { class: 'm-item', html: `环境 <b>${U.escapeHtml(env.name)}</b>` }));
+    box.appendChild(U.el('span', { class: 'm-item', html: `已用 <b id="sendingElapsed">0.0s</b>` }));
+  }
+
+  function renderSendingBody() {
+    const content = U.$('#resContent');
+    if (!content) return;
+    content.innerHTML = '';
+    const s = currentSent;
+    if (!s) return;
+
+    const box = U.el('div', { class: 'sending-box' });
+    box.appendChild(U.el('div', { class: 'sending-head' }, [
+      U.el('span', { class: 'spin' }),
+      U.el('b', { text: '正在发送，下面是本次真正发出的内容' }),
+      U.el('span', { class: 'muted-sm', text: '（变量已解析 · 右上角可「取消」）' })
+    ]));
+
+    box.appendChild(sentSummaryNode(s, { compact: true }));
+
+    box.appendChild(U.el('div', { class: 'sr-hint' },
+      [U.el('span', { text: '想看完整细节（含自动携带的环境 Header / Token 注入），点右上角「实际发出」标签。' })]));
+
+    content.appendChild(box);
+  }
+
+  /** 「实际发出」的通用摘要节点 */
+  function sentSummaryNode(s, { compact = false } = {}) {
+    const wrap = U.el('div', { class: 'sr-wrap' });
+
+    // 1) 未解析到的变量 → 醒目的红色警告
+    if (s.missing && s.missing.length) {
+      wrap.appendChild(U.el('div', { class: 'sr-warn' }, [
+        U.el('b', { text: '⚠ 有变量没解析出来：' }),
+        U.el('span', { text: s.missing.map((n) => `{{${n}}}`).join('、') }),
+        U.el('div', { class: 'sr-warn-sub', text: '这些位置会被原样发出去，检查一下环境变量名是否写错、或该环境里是否漏配。' })
+      ]));
+    }
+
+    // 2) 方法 + 完整 URL
+    const line = U.el('div', { class: 'sr-line' }, [
+      U.el('span', { class: 'node-method ' + U.methodClass(s.method), text: s.method }),
+      U.el('span', { class: 'sr-url', text: s.url || '(空 URL)' })
+    ]);
+    wrap.appendChild(line);
+
+    // 3) 请求头
+    const hk = Object.keys(s.headers || {});
+    wrap.appendChild(U.el('div', { class: 'sr-cap', text: `请求头（${hk.length}）` }));
+    if (!hk.length) {
+      wrap.appendChild(U.el('div', { class: 'sr-empty', text: '没有请求头' }));
+    } else if (compact) {
+      const mini = U.el('table', { class: 'h-table' });
+      for (const k of hk.sort()) mini.appendChild(U.el('tr', {}, [
+        U.el('td', { text: k }), U.el('td', { text: String(s.headers[k]) })
+      ]));
+      wrap.appendChild(mini);
+    } else {
+      const table = U.el('table', { class: 'h-table' });
+      const injectedName = s.injected ? s.injected.name : null;
+      for (const k of hk.sort()) {
+        const isInjected = injectedName && k.toLowerCase() === String(injectedName).toLowerCase();
+        const fromEnv = (s.notes || []).some((n) => n.startsWith(k + ':'));
+        table.appendChild(U.el('tr', {}, [
+          U.el('td', {}, [
+            U.el('span', { text: k }),
+            isInjected ? U.el('span', { class: 'sr-tag token', text: 'Token 注入' }) : null,
+            fromEnv ? U.el('span', { class: 'sr-tag env', text: '环境自动携带' }) : null
+          ]),
+          U.el('td', { text: String(s.headers[k]) })
+        ]));
+      }
+      wrap.appendChild(table);
+    }
+
+    // 4) 变量解析对照
+    if (!compact && s.vars && s.vars.length) {
+      wrap.appendChild(U.el('div', { class: 'sr-cap', text: `变量解析（${s.vars.length}）` }));
+      const vt = U.el('table', { class: 'h-table' });
+      for (const v of s.vars) {
+        vt.appendChild(U.el('tr', {}, [
+          U.el('td', {}, [
+            U.el('span', { class: 'sr-var', text: `{{${v.name}}}` }),
+            U.el('span', { class: 'sr-tag ' + (v.value === null ? 'bad' : v.scope === '流程步骤' ? 'flow' : 'var'), text: v.scope })
+          ]),
+          v.value === null
+            ? U.el('td', { class: 'sr-miss', text: '未定义（会原样发出）' })
+            : U.el('td', { text: v.value })
+        ]));
+      }
+      wrap.appendChild(vt);
+    }
+
+    // 5) 请求体
+    const bp = bodyPreviewText(s.body);
+    wrap.appendChild(U.el('div', { class: 'sr-cap', text: `请求体（${s.body.mode === 'none' ? '无' : s.body.mode}）` }));
+    if (!bp) {
+      wrap.appendChild(U.el('div', { class: 'sr-empty', text: '没有请求体' }));
+    } else if (compact) {
+      wrap.appendChild(U.el('pre', { class: 'code sr-body', text: bp.length > 2000 ? bp.slice(0, 2000) + '\n…（已截断，切「实际发出」看全部）' : bp }));
+    } else {
+      const isJson = (s.body.contentType || '').includes('json') || (() => { try { JSON.parse(bp); return true; } catch (_) { return false; } })();
+      wrap.appendChild(U.el('pre', { class: 'code', html: isJson && bp.length < 200000 ? U.highlightJSON(JSON.parse(bp)) : U.escapeHtml(bp) }));
+    }
+
+    return wrap;
+  }
+
   function show(res, meta, tab) {
-    if (tab) tab.lastResponse = { res, meta, at: Date.now() };
+    if (tab) {
+      tab.lastResponse = { res, meta, at: Date.now() };
+      currentSent = tab.lastSent || null;
+    } else {
+      currentSent = null;
+    }
     render(res, meta);
   }
 
   function restore(tab) {
+    currentSent = (tab && tab.lastSent) || null;
     if (tab && tab.lastResponse) {
       render(tab.lastResponse.res, tab.lastResponse.meta);
     } else {
@@ -21,6 +206,7 @@ const Response = (() => {
       U.$('#resHeaders').innerHTML = '';
       U.$('#resRequest').innerHTML = '';
       U.$('#cntResHeaders').textContent = '';
+      renderRequest(null, {});
     }
   }
 
@@ -266,35 +452,63 @@ const Response = (() => {
 
   function renderRequest(res, meta) {
     const box = U.$('#resRequest');
+    if (!box) return;
     box.innerHTML = '';
-    const p = res.requestPreview;
-    if (!p) {
-      box.innerHTML = '<div class="res-placeholder"><p>没有请求快照</p></div>';
+    res = res || {};
+    meta = meta || {};
+
+    // 没有本次构建快照（例如从历史打开）时，退回主进程给的请求预览
+    if (!currentSent) {
+      const p = res.requestPreview;
+      if (!p) {
+        box.innerHTML = '<div class="res-placeholder"><p>还没有「实际发出」的记录，点「发送」后这里会显示变量解析后的真实请求。</p></div>';
+        return;
+      }
+      const lines = [`${p.method} ${p.url}`, ''];
+      for (const [k, v] of Object.entries(p.headers || {})) lines.push(`${k}: ${v}`);
+      if (p.bodyPreview) { lines.push(''); lines.push(p.bodyPreview); }
+      box.appendChild(U.el('pre', { class: 'code', text: lines.join('\n') }));
       return;
     }
-    const lines = [];
-    lines.push(`${p.method} ${p.url}`);
-    lines.push('');
-    for (const [k, v] of Object.entries(p.headers || {})) lines.push(`${k}: ${v}`);
-    if (p.bodyPreview) { lines.push(''); lines.push(p.bodyPreview); }
 
-    if (meta.injected) {
+    const s = currentSent;
+    box.appendChild(U.el('div', { class: 'sr-head' }, [
+      U.el('b', { text: '本次实际发出' }),
+      U.el('span', { class: 'muted-sm', text: ' · ' + U.fmtDateTime(s.at) })
+    ]));
+
+    box.appendChild(sentSummaryNode(s));
+
+    // 真正发出去时客户端自动补充的头（Host / Content-Length 等）
+    const wire = (res.requestPreview && res.requestPreview.headers) || null;
+    if (wire) {
+      const extra = Object.keys(wire).filter((k) => !(k in s.headers));
+      if (extra.length) {
+        box.appendChild(U.el('div', { class: 'sr-cap', text: '客户端自动补充' }));
+        const t = U.el('table', { class: 'h-table' });
+        for (const k of extra.sort()) {
+          t.appendChild(U.el('tr', {}, [U.el('td', { text: k }), U.el('td', { text: String(wire[k]) })]));
+        }
+        box.appendChild(t);
+      }
+    }
+
+    if (s.injected) {
       box.appendChild(U.el('div', {
-        style: 'margin-bottom:10px;padding:8px 11px;border-radius:5px;background:#fff1ec;border:1px solid #ffd4c4;font-size:12px;color:#8a4021',
-        text: meta.injected.where === 'query'
-          ? `Token 已注入到 URL 参数 ${meta.injected.name}`
-          : `Token 已注入到请求头 ${meta.injected.name}`
+        style: 'margin:12px 0 0;padding:8px 11px;border-radius:5px;background:#fff1ec;border:1px solid #ffd4c4;font-size:12px;color:#8a4021',
+        text: s.injected.where === 'query'
+          ? `Token 已注入到 URL 参数 ${s.injected.name}`
+          : `Token 已注入到请求头 ${s.injected.name}`
       }));
     }
     if (res.redirects && res.redirects.length) {
-      const rd = U.el('div', { style: 'margin-bottom:10px;font-size:12px;color:#5c5c5c' });
+      const rd = U.el('div', { style: 'margin:12px 0 0;font-size:12px;color:#5c5c5c' });
       rd.appendChild(U.el('div', { style: 'font-weight:600;margin-bottom:4px', text: '重定向链路' }));
       for (const r of res.redirects) {
         rd.appendChild(U.el('div', { style: 'font-family:var(--mono);font-size:11.5px', text: `${r.status}  ${r.from} → ${r.to}` }));
       }
       box.appendChild(rd);
     }
-    box.appendChild(U.el('pre', { class: 'code', text: lines.join('\n') }));
   }
 
   function currentRes() {
@@ -346,5 +560,8 @@ const Response = (() => {
     });
   }
 
-  return { show, restore, bind, fuzzyFind, previewValue };
+  return {
+    show, restore, bind, showSending, endSending,
+    fuzzyFind, previewValue, normalizeSent, bodyPreviewText
+  };
 })();

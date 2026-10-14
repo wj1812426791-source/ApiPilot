@@ -99,6 +99,10 @@ const Vars = (() => {
       if (name.startsWith('$')) {
         const val = resolveStepValue(name, ctx);
         if (val !== undefined) return String(val);
+        // $ 开头的不只是流程步骤变量，还有内置动态变量（$timestamp / $guid …），
+        // 之前这里直接判为「未定义」，导致 {{$timestamp}} 被原样发出去。
+        const dyn = dynamic(name);
+        if (dyn !== undefined) return dyn;
         missing.push(name);
         return full;
       }

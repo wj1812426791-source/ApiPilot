@@ -3,6 +3,44 @@
    ========================================================================= */
 const Http = (() => {
 
+  /** 收集一段文本里用到的 {{变量}}，并给出解析结果（用于「实际发出」面板核对） */
+  function collectVars(rawParts, env, ctx) {
+    const map = Vars.scope(env);
+    const rows = [];
+    const seen = new Set();
+    for (const raw of rawParts) {
+      if (typeof raw !== 'string' || raw.indexOf('{{') < 0) continue;
+      const re = new RegExp(Vars.VAR_RE.source, 'g');
+      let m;
+      while ((m = re.exec(raw)) !== null) {
+        const name = m[1].trim();
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+
+        if (name.startsWith('$')) {
+          const sv = Vars.resolveStepValue(name, ctx);
+          if (sv !== undefined) { rows.push({ name, value: String(sv), scope: '流程步骤' }); continue; }
+          // 可能是内置动态变量（$timestamp / $guid …）
+          const d = Vars.resolveDetail(m[0], env, ctx);
+          rows.push({
+            name,
+            value: d.missing.length ? null : d.text,
+            scope: d.missing.length ? '未定义' : '动态'
+          });
+          continue;
+        }
+        if (map.has(name)) { rows.push({ name, value: String(map.get(name)), scope: '变量' }); continue; }
+        const d = Vars.resolveDetail(m[0], env, ctx);
+        rows.push({
+          name,
+          value: d.missing.length ? null : d.text,
+          scope: d.missing.length ? '未定义' : '动态'
+        });
+      }
+    }
+    return rows;
+  }
+
   /** 把请求模型编译成主进程能发的 config */
   function build(req, env, ctx) {
     const holder = { url: '' };
@@ -105,6 +143,21 @@ const Http = (() => {
       };
     }
 
+    // 5) 变量使用清单（「实际发出」面板用来核对有没有漏/错，未解析到的会标红）
+    const rawParts = [
+      req.url || '',
+      ...(req.pathVars || []).map((p) => p.value || ''),
+      ...(req.params || []).flatMap((p) => [p.key || '', p.value || '']),
+      ...(env && Array.isArray(env.headers) ? env.headers.flatMap((h) => [h.key || '', h.value || '']) : []),
+      ...(req.headers || []).flatMap((h) => [h.key || '', h.value || '']),
+      b.raw || '',
+      ...(b.urlencoded || []).flatMap((i) => [i.key || '', i.value || '', i.src || '']),
+      ...(b.formdata || []).flatMap((i) => [i.key || '', i.value || '', i.src || '']),
+      (auth.bearer || '') + (auth.apiKey || '') + (auth.apiValue || '') + (auth.username || '') + (auth.password || '')
+    ];
+    const vars = collectVars(rawParts, env, ctx);
+    const missing = vars.filter((v) => v.value === null).map((v) => v.name);
+
     const st = req.settings || {};
     return {
       config: {
@@ -118,14 +171,17 @@ const Http = (() => {
         timeout: Number(st.timeout) || 60000
       },
       injected,
-      notes
+      notes,
+      vars,
+      missing
     };
   }
 
   /** 发送（自动处理 Token） */
-  async function send(req, { onStage, env, ctx, reqId } = {}) {
+  async function send(req, { onStage, onBuilt, env, ctx, reqId } = {}) {
     const activeEnv = env !== undefined ? env : Store.activeEnv();
     const stage = (s) => { if (onStage) onStage(s); };
+    const emitBuilt = (b) => { if (onBuilt) { try { onBuilt(b); } catch (_) { /* 回调异常不影响发送 */ } } };
     const meta = { reloggedIn: false, loginError: null, injected: null };
 
     // 校验 URL
@@ -150,6 +206,7 @@ const Http = (() => {
     let built = build(req, activeEnv, ctx);
     if (reqId) built.config.reqId = reqId;   // 供主进程取消用
     meta.injected = built.injected;
+    emitBuilt(built);                        // 发包前先让界面展示「实际发出」
     let res = await window.api.send(built.config);
     res.finalUrl = built.config.url;
 
@@ -162,6 +219,7 @@ const Http = (() => {
         built = build(req, activeEnv, ctx);
         if (reqId) built.config.reqId = reqId;
         meta.injected = built.injected;
+        emitBuilt(built);
         const retry = await window.api.send(built.config);
         retry.finalUrl = built.config.url;
         retry.retriedAfterRelogin = true;
@@ -173,8 +231,8 @@ const Http = (() => {
     }
 
     stage('done');
-    return { res, meta, config: built.config };
+    return { res, meta, config: built.config, vars: built.vars, missing: built.missing, notes: built.notes };
   }
 
-  return { build, send };
+  return { build, send, collectVars };
 })();

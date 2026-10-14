@@ -717,7 +717,9 @@ const Editor = (() => {
     try {
       const { res, meta, config } = await Http.send(req, {
         reqId: sendingReqId,
-        onStage: (s) => renderSendBusy(s)
+        onStage: (s) => renderSendBusy(s),
+        // build 完成（变量已解析）就先把「实际发出」展示出来，而不是等响应回来
+        onBuilt: (built) => Response.showSending(tab, built)
       });
 
       if (res && res.canceled) {
@@ -753,6 +755,7 @@ const Editor = (() => {
       sending = false;
       sendingReqId = null;
       canceling = false;
+      Response.endSending();
       resetSendButton();
     }
   }

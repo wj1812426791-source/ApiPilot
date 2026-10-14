@@ -948,3 +948,48 @@ pre.code.nowrap { white-space: pre; }
 .code-hl .tok-num { color: #0d7fd6; }
 .code-hl .tok-bool { color: #c08a00; }
 .code-hl .tok-null { color: #8a8a8a; }
+
+/* ============ 「实际发出」面板 / 发送中预览 ============ */
+.sending-box { padding: 12px 14px 16px; }
+.sending-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--text-2); margin-bottom: 10px;
+}
+.sending-head .spin { border-color: rgba(217,109,42,.28); border-top-color: var(--orange); }
+.sending-head .muted-sm { cursor: default; }
+.sending-head .muted-sm:hover { color: var(--text-3); }
+
+.sr-wrap { border: 1px solid var(--border); border-radius: 7px; background: var(--bg-2); padding: 11px 12px; }
+.sr-head { display: flex; align-items: baseline; gap: 4px; font-size: 12.5px; margin-bottom: 9px; }
+.sr-line { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.sr-line .node-method { flex: none; margin-top: 1px; }
+.sr-url {
+  flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; color: var(--text);
+  word-break: break-all; white-space: pre-wrap; line-height: 1.55;
+}
+.sr-cap {
+  margin: 12px 0 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .4px;
+  color: var(--text-3); text-transform: uppercase;
+}
+.sr-cap:first-child { margin-top: 0; }
+.sr-empty { font-size: 11.5px; color: var(--text-3); padding: 3px 0; }
+.sr-body { max-height: 320px; overflow: auto; }
+
+.sr-tag {
+  display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 3px;
+  font-size: 10px; font-weight: 600; vertical-align: 1px;
+}
+.sr-tag.token { background: #fff1ec; color: #a8501f; border: 1px solid #ffd4c4; }
+.sr-tag.env { background: #eaf3ff; color: #1f5aa8; border: 1px solid #cfe0f7; }
+.sr-tag.var { background: #eef7ee; color: #2c6b34; border: 1px solid #d3e8d4; }
+.sr-tag.flow { background: #f3eefc; color: #6a45b5; border: 1px solid #ded1f5; }
+.sr-tag.bad { background: #fdeceb; color: var(--red); border: 1px solid #f0c4bf; }
+.sr-var { font-family: var(--mono); font-size: 11.5px; }
+.sr-miss { color: var(--red); font-weight: 600; }
+
+.sr-warn {
+  margin-bottom: 11px; padding: 8px 11px; border-radius: 5px;
+  background: #fdeceb; border: 1px solid #f0c4bf; color: #a32218; font-size: 12px; line-height: 1.7;
+}
+.sr-warn-sub { margin-top: 3px; color: #a32218; opacity: .85; font-size: 11.5px; }
+.sr-hint { margin-top: 10px; font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
