@@ -13,8 +13,9 @@ const Store = (() => {
     bodyItems: [],
     tokenPath: 'data.token',
     injectTo: 'header',
-    headerName: 'Authorization',
-    prefix: 'Bearer ',
+    // 默认按多数 Java/learun 系后端习惯：请求头名 token，不带前缀（如 `token: <值>`）
+    headerName: 'token',
+    prefix: '',
     queryName: 'token',
     ttlSeconds: 7200,
     expirePath: '',

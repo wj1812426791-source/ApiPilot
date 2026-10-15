@@ -449,7 +449,7 @@ const Editor = (() => {
 
     if (req.auth && req.auth.type === 'inherit' && env && env.login && env.login.enabled) {
       const st = Auth.status(env);
-      const name = env.login.headerName || 'Authorization';
+      const name = env.login.headerName || 'token';
       const preview = st.token
         ? (env.login.prefix || '') + st.token.slice(0, 24) + (st.token.length > 24 ? '…' : '')
         : '（发送时自动登录获取）';
@@ -515,7 +515,7 @@ const Editor = (() => {
         const st = Auth.status(env);
         const inject = env.login.injectTo === 'query'
           ? `URL 参数 <code>${U.escapeHtml(env.login.queryName || 'token')}</code>`
-          : `请求头 <code>${U.escapeHtml(env.login.headerName || 'Authorization')}</code>`;
+          : `请求头 <code>${U.escapeHtml(env.login.headerName || 'token')}</code>`;
         note.innerHTML = `发送时会自动把环境「${U.escapeHtml(env.name)}」的 Token 注入到 ${inject}，
           前缀 <code>${U.escapeHtml(env.login.prefix || '(无)')}</code>。<br>
           当前状态：<b>${U.escapeHtml(st.text)}</b>。Token 不存在或已过期时会先自动登录，

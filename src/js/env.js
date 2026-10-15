@@ -322,11 +322,14 @@ const Env = (() => {
       qn.addEventListener('input', () => { login.queryName = qn.value; save(); });
       grid.appendChild(U.el('label', { class: 'field' }, [U.el('span', { class: 'field-label', text: '参数名' }), qn]));
     } else {
-      const hn = U.el('input', { class: 'input mono', type: 'text', value: login.headerName || 'Authorization' });
+      const hn = U.el('input', { class: 'input mono', type: 'text', value: login.headerName || 'token' });
       hn.addEventListener('input', () => { login.headerName = hn.value; save(); });
       grid.appendChild(U.el('label', { class: 'field' }, [U.el('span', { class: 'field-label', text: 'Header 名' }), hn]));
 
-      const pf = U.el('input', { class: 'input mono', type: 'text', value: login.prefix || '', placeholder: 'Bearer ' });
+      const pf = U.el('input', {
+        class: 'input mono', type: 'text', value: login.prefix || '',
+        placeholder: '留空则原样放入，如 Bearer+空格'
+      });
       pf.addEventListener('input', () => { login.prefix = pf.value; save(); });
       grid.appendChild(U.el('label', { class: 'field' }, [
         U.el('span', { class: 'field-label', text: '前缀（注意末尾空格）' }), pf

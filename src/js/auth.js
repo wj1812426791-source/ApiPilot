@@ -253,7 +253,7 @@ const Auth = (() => {
       return { where: 'query', name, value: token };
     }
 
-    const name = login.headerName || 'Authorization';
+    const name = login.headerName || 'token';
     const exists = Object.keys(headers).some((k) => k.toLowerCase() === name.toLowerCase());
     if (exists) return null; // 请求自己写了同名头，尊重用户
     const value = (login.prefix || '') + token;
