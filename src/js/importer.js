@@ -352,7 +352,7 @@ const Importer = (() => {
     };
 
     UI.open({
-      title: '导入', size: 'md',
+      title: '导入', size: 'md', replace: true,
       body: U.el('div', {}, [
         U.el('div', { class: 'panel-caption', text: '支持：Postman Collection v2.1 JSON、Postman 环境 JSON、ApiPilot 请求 JSON、cURL 命令' }),
         ta
@@ -466,7 +466,7 @@ const Importer = (() => {
     envCb.checked = true;
 
     UI.open({
-      title: '导出', size: 'sm',
+      title: '导出', size: 'sm', replace: true,
       body: U.el('div', {}, [
         U.el('div', { class: 'panel-caption', text: '选择要导出的集合（Postman v2.1 格式）' }),
         list,

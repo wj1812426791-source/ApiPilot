@@ -13,7 +13,7 @@ const Env = (() => {
 
     const layout = U.el('div', { class: 'env-layout' });
     UI.open({
-      title: '环境管理', size: 'lg', body: layout,
+      title: '环境管理', size: 'lg', body: layout, replace: true,
       onClose: () => {
         Store.save();
         App.refreshEnvSelect();

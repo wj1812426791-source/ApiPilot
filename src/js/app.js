@@ -263,7 +263,7 @@ const App = (() => {
       body.appendChild(t2);
 
       UI.open({
-        title: '设置与信息', size: 'md', body,
+        title: '设置与信息', size: 'md', body, replace: true,
         footer: U.el('div', { style: 'display:flex;gap:9px;width:100%' }, [
           U.el('button', {
             class: 'btn', text: '打开数据目录',

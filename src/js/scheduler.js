@@ -166,6 +166,7 @@ const Scheduler = (() => {
     UI.open({
       title: '⏰ 定时任务 · ' + req.name,
       size: 'sm',
+      replace: true,
       body: wrap,
       onMount: () => {
         renderConfig(req);
