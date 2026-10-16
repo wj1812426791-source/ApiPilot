@@ -84,7 +84,65 @@ const App = (() => {
     return tag === 'input' || tag === 'textarea' || tag === 'select' || node.isContentEditable === true;
   }
 
+  /** 当前是否有文本被选中：有的话 Ctrl+C 交给浏览器原生复制，别抢着复制"请求" */
+  function hasTextSelection() {
+    try {
+      const sel = window.getSelection ? window.getSelection() : null;
+      if (!sel || !sel.rangeCount) return false;
+      return String(sel.toString()).length > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** 最近一次点击落在哪个"文本区"（响应体 / 响应头 / 实际发出 / 定时日志 / 请求 Body） */
+  let lastTextZone = null;
+
+  /** 把点击目标映射成文本区；返回 { el, field } 或 null（field 优先，如请求 Body 的文本域） */
+  function textZoneFor(target) {
+    if (!target || typeof target.closest !== 'function') return null;
+    const res = target.closest('#resContent, #resHeaders, #resRequest, #resScheduleLog, #flowResult');
+    if (res) return { el: res, field: null };
+    const bodyPanel = target.closest('.req-panel[data-rp="body"]');
+    if (bodyPanel) {
+      const raw = U.$('#rawBody');
+      const rawVisible = !!(raw && raw.offsetParent !== null);
+      return { el: bodyPanel, field: rawVisible ? raw : null };
+    }
+    return null;
+  }
+
+  /** Ctrl+A：把选区限制在最近点击的那个文本区里；返回 true 表示已处理（调用方再 preventDefault） */
+  function selectAllInZone() {
+    const zone = lastTextZone;
+    if (!zone) return false;
+    // 1) 文本域（请求 Body raw）
+    if (zone.field && zone.field.offsetParent !== null) {
+      zone.field.focus();
+      zone.field.select();
+      return true;
+    }
+    // 2) 普通容器（响应体等）
+    if (!zone.el || zone.el.offsetParent === null) return false;
+    try {
+      const sel = window.getSelection ? window.getSelection() : null;
+      if (!sel || !document.createRange) return false;
+      const range = document.createRange();
+      range.selectNodeContents(zone.el);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function bindShortcuts() {
+    // 记录"最近点击的文本区"，供 Ctrl+A 判断作用范围（捕获阶段，先于业务 handler）
+    document.addEventListener('mousedown', (e) => {
+      lastTextZone = textZoneFor(e.target);
+    }, true);
+
     document.addEventListener('keydown', (e) => {
       const ctrl = e.ctrlKey || e.metaKey;
       if (!ctrl) return;
@@ -108,6 +166,8 @@ const App = (() => {
       else if (k === 'c') {
         // 焦点在输入框/文本域里时保留原生文本复制
         if (isEditable(e.target)) return;
+        // 选中了文本（比如响应体里拖选一段）时也保留原生复制，别抢着复制请求
+        if (hasTextSelection()) return;
         const node = Tree.getSelected();
         if (!node) return;
         e.preventDefault();
@@ -123,6 +183,12 @@ const App = (() => {
           return;
         }
         Tree.pasteTo(node);
+      }
+      else if (k === 'a') {
+        // 焦点在输入框/文本域里 → 原生「全选本框内容」就好
+        if (isEditable(e.target)) return;
+        // 点过响应体 / 请求 Body 等文本区 → 只全选那一块，不再全选整个页面
+        if (selectAllInZone()) e.preventDefault();
       }
       else if (k === 'tab') {
         e.preventDefault();
@@ -291,5 +357,9 @@ const App = (() => {
     });
   });
 
-  return { refreshEnvSelect, refreshTokenChip };
+  return {
+    refreshEnvSelect, refreshTokenChip, bindShortcuts,
+    hasTextSelection, textZoneFor, selectAllInZone,
+    setLastTextZone: (z) => { lastTextZone = z; }
+  };
 })();

@@ -87,7 +87,9 @@ check('importer 支持导入 _apipilotRequest', importerCode.includes('_apipilot
 check('tree 请求菜单含「导出请求…」', treeCode.includes('导出请求…'));
 
 console.log('\nBody Ctrl+A 作用范围检查');
-check('editor.js 处理 body 区域 Ctrl+A', editorCode.includes('bodyRegionActive'));
+// 「点过 Body 面板空白处 / 响应体后 Ctrl+A 只选该块」已统一到 app.js（App.textZoneFor → selectAllInZone）
+check('app.js 统一处理文本区 Ctrl+A（Body 面板 / 响应体）', loadSrc('app.js').includes('selectAllInZone'));
+check('editor.js 不再重复注册 doc 级 Ctrl+A', !editorCode.includes('bodyRegionActive'));
 check('editor.js rawBody 拦截 Ctrl+A', editorCode.includes("e.key.toLowerCase() === 'a'"));
 
 console.log(`\n结果：${passed} 通过，${failed} 失败`);

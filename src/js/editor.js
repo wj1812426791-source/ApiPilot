@@ -853,26 +853,8 @@ const Editor = (() => {
       }
     });
 
-    // 记录最近一次点击是否落在 Body 面板内（供全局 Ctrl+A 判断作用范围）
-    let bodyRegionActive = false;
-    document.addEventListener('mousedown', (e) => {
-      const panel = U.$('.req-panel[data-rp="body"]');
-      bodyRegionActive = !!(panel && panel.offsetParent !== null && panel.contains(e.target));
-    }, true);
-
-    // 点过 Body 框但焦点没落在输入框（例如点在空白处）时，Ctrl+A 也只全选 Body
-    document.addEventListener('keydown', (e) => {
-      if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a')) return;
-      const ae = document.activeElement;
-      const isField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
-      if (isField || !bodyRegionActive) return;
-      const raw = U.$('#rawBody');
-      if (raw && raw.offsetParent !== null) {
-        e.preventDefault();
-        raw.focus();
-        raw.select();
-      }
-    });
+    // 请求 Body 面板的「Ctrl+A 只全选 Body」已统一到 app.js 的全局快捷键
+    // （App.textZoneFor → selectAllInZone），这里不再重复注册，避免双重处理。
 
     U.$('#btnFormatBody').addEventListener('click', () => {
       const req = currentReq();
