@@ -426,8 +426,10 @@ let saveTimer = null;
 ipcMain.handle('store:save', async (_evt, data) => {
   try {
     const txt = JSON.stringify(data, null, 2);
-    await fsp.writeFile(STORE_FILE + '.tmp', txt, 'utf8');
-    await fsp.rename(STORE_FILE + '.tmp', STORE_FILE);
+    // tmp 文件名唯一：避免「异步保存」与「退出前同步保存」并发时互相覆盖同一个临时文件
+    const tmp = `${STORE_FILE}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await fsp.writeFile(tmp, txt, 'utf8');
+    await fsp.rename(tmp, STORE_FILE);
     // 每天保留一份备份
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
@@ -446,8 +448,9 @@ ipcMain.handle('store:save', async (_evt, data) => {
 ipcMain.on('store:save-sync', (evt, data) => {
   try {
     const txt = JSON.stringify(data, null, 2);
-    fs.writeFileSync(STORE_FILE + '.tmp', txt, 'utf8');
-    fs.renameSync(STORE_FILE + '.tmp', STORE_FILE);
+    const tmp = `${STORE_FILE}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    fs.writeFileSync(tmp, txt, 'utf8');
+    fs.renameSync(tmp, STORE_FILE);
     evt.returnValue = { ok: true };
   } catch (e) {
     evt.returnValue = { ok: false, error: e.message };

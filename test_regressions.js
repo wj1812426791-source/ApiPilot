@@ -93,7 +93,9 @@ const mainSrc = loadRoot('main.js');
 const preloadSrc = loadRoot('preload.js');
 check('main.js 注册 store:save-sync', mainSrc.includes("'store:save-sync'"));
 check('同步写用 tmp + rename（保持原子性）',
-  /writeFileSync\(STORE_FILE \+ '\.tmp'[\s\S]{0,120}renameSync/.test(mainSrc));
+  /writeFileSync\(tmp[\s\S]{0,120}renameSync\(tmp/.test(mainSrc));
+check('tmp 文件名唯一（并发写不会互相覆盖）',
+  /\$\{STORE_FILE\}\.tmp-\$\{process\.pid\}-\$\{Date\.now\(\)\}/.test(mainSrc));
 check('preload 暴露 saveStoreSync', preloadSrc.includes('saveStoreSync'));
 
 /* ------------------------------ 5. 删除环境不抢选中 ------------------------------ */
