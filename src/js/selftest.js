@@ -204,11 +204,11 @@ const SelfTest = (() => {
       variables: [{ key: 'baseUrl', value: 'http://example.com', desc: '', enabled: true }],
       login: { enabled: true, url: '{{baseUrl}}/login', tokenPath: 'data.token' }
     };
-    const prevOpen = window.api.openDialog;
-    const stubOpen = (obj) => { window.api.openDialog = async () => ({ ok: true, content: JSON.stringify(obj) }); };
+    // 注意：不能给 window.api.openDialog 重新赋值（contextBridge 暴露的对象是只读的，
+    // 赋值会静默失败 → 真的弹出系统文件选择框 → 自检永远卡住）。改为直接把内容传进去。
+    const importEnv = (obj) => Importer.importEnvironmentsFromFile(obj);
     try {
-      stubOpen(sampleEnv);
-      const r1 = await Importer.importEnvironmentsFromFile();
+      const r1 = await importEnv(sampleEnv);
       check('环境导入：_apipilotEnv 返回 1 个', r1 && r1.count === 1, r1 ? r1.names.join(',') : 'null');
       const imp1 = Store.state.environments.find((e) => e.name === '导入导出测试环境');
       check('环境导入：已加入环境列表', !!imp1);
@@ -218,36 +218,35 @@ const SelfTest = (() => {
       check('环境导入：login 默认值兜底', imp1 && imp1.login && imp1.login.injectTo === 'header' && imp1.login.tokenPath === 'data.token');
 
       // 裸对象
-      stubOpen({ name: '裸对象环境', variables: [] });
-      const r2 = await Importer.importEnvironmentsFromFile();
+      const r2 = await importEnv({ name: '裸对象环境', variables: [] });
       check('环境导入：裸对象可被识别', r2 && r2.count === 1, r2 ? r2.names.join(',') : 'null');
 
       // 裸数组（多个环境）
-      stubOpen([
+      const r3 = await importEnv([
         { name: '数组环境A', variables: [{ key: 'k', value: 'v' }] },
         { name: '数组环境B', login: { enabled: true } }
       ]);
-      const r3 = await Importer.importEnvironmentsFromFile();
       check('环境导入：裸数组批量导入 2 个', r3 && r3.count === 2, r3 ? r3.names.join(',') : 'null');
 
       // 完整 _apipilot 备份包
-      stubOpen({ _apipilot: true, environments: [{ name: '包环境', variables: [] }], collections: [] });
-      const r4 = await Importer.importEnvironmentsFromFile();
+      const r4 = await importEnv({ _apipilot: true, environments: [{ name: '包环境', variables: [] }], collections: [] });
       check('环境导入：_apipilot 包内的环境可被识别', r4 && r4.count === 1, r4 ? r4.names.join(',') : 'null');
 
       // 非法内容
-      stubOpen({ foo: 'bar' });
-      const r5 = await Importer.importEnvironmentsFromFile();
+      const r5 = await importEnv({ foo: 'bar' });
       check('环境导入：非法内容被拒（返回 null）', r5 === null, String(r5));
     } finally {
-      window.api.openDialog = prevOpen;
+      // 没有需要还原的桩（内容通过参数传入）
     }
 
     /* 14. 持久化 */
     Store.save();
     await new Promise((r) => setTimeout(r, 700));
     const loaded = await window.api.loadStore();
-    check('数据成功落盘', loaded.ok && loaded.data && loaded.data.environments.length === 1);
+    // 注意：13b 的环境导入会往列表里加环境，这里不能写死 === 1
+    check('数据成功落盘',
+      loaded.ok && loaded.data && Array.isArray(loaded.data.environments) && loaded.data.environments.length >= 1,
+      loaded.ok && loaded.data ? `环境数=${(loaded.data.environments || []).length}` : String(loaded.error));
     check('Token 一并持久化', loaded.ok && !!loaded.data.environments[0].token.value);
 
     /* 15. 界面渲染（确认 GUI 真的画出来了，不是靠"没报错"推断） */

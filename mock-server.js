@@ -101,14 +101,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---------------------- 其他工具接口 ----------------------
-  if (pathname === '/api/echo') {
+  if (pathname === '/api/echo' || pathname.startsWith('/api/echo/')) {
     const raw = await readBody(req);
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch (_) { /* 非 JSON body 忽略 */ }
     return json(res, 200, {
       code: 200,
       method: req.method,
       query: Object.fromEntries(u.searchParams),
       headers: req.headers,
-      body: raw
+      body: raw,
+      // 回显请求体里的 data：方便流程用例用 {{$1.data.xxx}} 取前置步骤返回
+      data: (parsed && parsed.data) || undefined,
+      path: pathname
     });
   }
 

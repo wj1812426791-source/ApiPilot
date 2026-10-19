@@ -558,12 +558,22 @@ const Importer = (() => {
     };
   }
 
-  async function importEnvironmentsFromFile() {
-    const r = await window.api.openDialog({
-      properties: ['openFile'], readAsText: true,
-      filters: [{ name: 'JSON', extensions: ['json'] }, { name: '全部文件', extensions: ['*'] }]
-    });
-    if (!r.ok) return null;
+  /**
+   * 从文件导入环境。
+   * @param {object|string} [preloaded] 已经读到的内容（自检 / 自动化用）；传了就不再弹文件选择框
+   */
+  async function importEnvironmentsFromFile(preloaded) {
+    let r;
+    if (preloaded !== undefined) {
+      // 注意：window.api 是 contextBridge 暴露的只读对象，测试里不能靠重新赋值来打桩
+      r = { ok: true, content: typeof preloaded === 'string' ? preloaded : JSON.stringify(preloaded) };
+    } else {
+      r = await window.api.openDialog({
+        properties: ['openFile'], readAsText: true,
+        filters: [{ name: 'JSON', extensions: ['json'] }, { name: '全部文件', extensions: ['*'] }]
+      });
+    }
+    if (!r || !r.ok) return null;
 
     let json;
     try { json = JSON.parse(r.content); }
