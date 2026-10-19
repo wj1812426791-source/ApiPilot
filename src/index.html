@@ -272,7 +272,13 @@
                   <button class="seg-btn" data-view="preview">Preview</button>
                 </div>
                 <div class="spacer"></div>
-                <input type="text" class="res-filter" id="resFilter" placeholder="模糊查询 body：键名/值包含即命中，也可填精确路径 data.list.0.name">
+                <!-- 响应体搜索：平时隐藏，Ctrl+F 唤出（Esc 或 × 关闭） -->
+                <div class="res-search" id="resSearch" hidden>
+                  <input type="text" class="res-filter" id="resFilter" spellcheck="false"
+                         placeholder="模糊查询 body：键名/值包含即命中，也可填精确路径 data.list.0.name">
+                  <button class="res-search-close" id="btnCloseResSearch" type="button"
+                          title="关闭搜索（Esc）">×</button>
+                </div>
                 <button class="mini-btn" id="btnCopyRes">复制</button>
                 <button class="mini-btn" id="btnSaveRes">保存</button>
               </div>

@@ -212,6 +212,7 @@ const Response = (() => {
 
   function restore(tab) {
     currentSent = (tab && tab.lastSent) || null;
+    resetSearch();          // 换标签页不继承上一个请求的搜索过滤
     if (tab && tab.lastResponse) {
       render(tab.lastResponse.res, tab.lastResponse.meta);
     } else {
@@ -571,11 +572,48 @@ const Response = (() => {
     return tab && tab.lastResponse ? tab.lastResponse.res : null;
   }
 
+  /* --------------------- 响应体搜索（Ctrl+F 唤出） --------------------- */
+  /** 唤出搜索框：只有「正停在 Body 标签且有可搜内容」时才接管，返回是否接管 */
+  function openSearch() {
+    const search = U.$('#resSearch');
+    const input = U.$('#resFilter');
+    if (!search || !input) return false;
+    const panel = U.$('.res-panel[data-sp="body"]');
+    if (!panel || !panel.classList.contains('active')) return false;
+    const res = currentRes();
+    if (!res || res.error || res.canceled || res.isBinary) return false;
+    search.hidden = false;
+    input.focus();
+    input.select();
+    return true;
+  }
+
+  /** 只清状态不重绘（切标签用，避免拿旧 tab 的响应重绘） */
+  function resetSearch() {
+    filterPath = '';
+    const input = U.$('#resFilter');
+    if (input) input.value = '';
+    const search = U.$('#resSearch');
+    if (search) search.hidden = true;
+  }
+
+  /** 收起搜索框：清空过滤并恢复完整响应 */
+  function closeSearch() {
+    const hadFilter = !!filterPath;
+    resetSearch();
+    if (hadFilter) {
+      const res = currentRes();
+      if (res) renderBody(res);
+    }
+  }
+
   function bind() {
     U.$$('.res-tab').forEach((btn) => {
       btn.addEventListener('click', () => {
         U.$$('.res-tab').forEach((b) => b.classList.toggle('active', b === btn));
         U.$$('.res-panel').forEach((p) => p.classList.toggle('active', p.dataset.sp === btn.dataset.st));
+        // 离开 Body 标签就把搜索收起并清过滤（会重绘一次，免得切回来还看到过滤后的旧内容）
+        if (btn.dataset.st !== 'body') closeSearch();
       });
     });
 
@@ -592,6 +630,15 @@ const Response = (() => {
       const res = currentRes();
       if (res) renderBody(res);
     }, 220));
+
+    // 搜索框里按 Esc 收起（stopPropagation：别冒泡到全局 Esc 去关弹窗）
+    U.$('#resFilter').addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeSearch();
+    });
+    U.$('#btnCloseResSearch').addEventListener('click', () => closeSearch());
 
     U.$('#btnCopyRes').addEventListener('click', async () => {
       const res = currentRes();
@@ -617,6 +664,7 @@ const Response = (() => {
 
   return {
     show, restore, bind, showSending, endSending,
+    openSearch, closeSearch, resetSearch,
     fuzzyFind, previewValue, normalizeSent, bodyPreviewText
   };
 })();

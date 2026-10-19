@@ -97,6 +97,8 @@ const App = (() => {
 
   /** 最近一次点击落在哪个"文本区"（响应体 / 响应头 / 实际发出 / 定时日志 / 请求 Body） */
   let lastTextZone = null;
+  /** 最近一次点击的原始目标（用于判断 Ctrl+F 该搜集合还是搜响应体） */
+  let lastMouseTarget = null;
 
   /** 把点击目标映射成文本区；返回 { el, field } 或 null（field 优先，如请求 Body 的文本域） */
   function textZoneFor(target) {
@@ -141,6 +143,7 @@ const App = (() => {
     // 记录"最近点击的文本区"，供 Ctrl+A 判断作用范围（捕获阶段，先于业务 handler）
     document.addEventListener('mousedown', (e) => {
       lastTextZone = textZoneFor(e.target);
+      lastMouseTarget = e.target;
     }, true);
 
     document.addEventListener('keydown', (e) => {
@@ -162,7 +165,14 @@ const App = (() => {
         if (t) Editor.closeTab(t.id);
       } else if (k === 'e') { e.preventDefault(); Env.openManager(); }
       else if (k === 'l') { e.preventDefault(); U.$('#urlInput').select(); }
-      else if (k === 'f') { e.preventDefault(); U.$('#sideSearch').focus(); }
+      else if (k === 'f') {
+        e.preventDefault();
+        // 正在看响应体 → 唤出响应体搜索（平时隐藏）；点在集合树里 → 搜集合
+        const inSidebar = !!(lastMouseTarget && typeof lastMouseTarget.closest === 'function'
+          && lastMouseTarget.closest('#sidebar'));
+        if (!inSidebar && Response && Response.openSearch && Response.openSearch()) return;
+        U.$('#sideSearch').focus();
+      }
       else if (k === 'c') {
         // 焦点在输入框/文本域里时保留原生文本复制
         if (isEditable(e.target)) return;
@@ -322,7 +332,8 @@ const App = (() => {
       row2('Ctrl + W', '关闭当前标签');
       row2('Ctrl + E', '打开环境管理');
       row2('Ctrl + L', '选中地址栏');
-      row2('Ctrl + F', '搜索集合');
+      row2('Ctrl + F', '搜响应体（看 Body 时）/ 搜索集合');
+      row2('Ctrl + A', '全选当前区域（响应体 / Body）');
       row2('Ctrl + C', '复制选中的请求/文件夹');
       row2('Ctrl + V', '粘贴到选中的集合/请求');
       row2('Ctrl + Tab', '切换标签页');
