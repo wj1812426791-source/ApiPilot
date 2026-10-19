@@ -76,23 +76,39 @@ const Http = (() => {
     }
 
     // 2) Headers：先铺「环境 Header」（该环境所有请求自动携带），再用请求自己的 Header 覆盖
+    //    HTTP 头名不区分大小写：x-current-project 与 X-Current-Project 必须算同一个，
+    //    否则会同时发出两行，服务端取到哪一个全看运气。
     const headers = {};
     const envHeaderNames = [];
+    const reqHeaderNames = new Set();
+    const setHeader = (k, v) => {
+      const key = String(k);
+      const dup = Object.keys(headers).find((x) => x.toLowerCase() === key.toLowerCase());
+      if (dup !== undefined && dup !== key) delete headers[dup];
+      headers[key] = v;
+    };
     if (env && Array.isArray(env.headers)) {
       for (const h of env.headers) {
         if (h.enabled === false || !h.key) continue;
         const k = Vars.resolve(h.key, env, ctx);
         if (!k) continue;
-        headers[k] = Vars.resolve(h.value ?? '', env, ctx);
+        setHeader(k, Vars.resolve(h.value ?? '', env, ctx));
         envHeaderNames.push(k);
       }
     }
     for (const h of req.headers || []) {
       if (h.enabled === false || !h.key) continue;
-      headers[Vars.resolve(h.key, env, ctx)] = Vars.resolve(h.value ?? '', env, ctx);
+      const k = Vars.resolve(h.key, env, ctx);
+      if (!k) continue;
+      setHeader(k, Vars.resolve(h.value ?? '', env, ctx));
+      reqHeaderNames.add(k.toLowerCase());
     }
     for (const k of envHeaderNames) {
-      if (headers[k] !== undefined) notes.push(`${k}: 由环境「${env.name}」自动携带`);
+      // 被请求自己的同名头（不论大小写）覆盖过，就不再声称「环境自动携带」
+      const live = Object.keys(headers).find((x) => x.toLowerCase() === k.toLowerCase());
+      if (live !== undefined && !reqHeaderNames.has(k.toLowerCase())) {
+        notes.push(`${k}: 由环境「${env.name}」自动携带`);
+      }
     }
 
     // 3) 认证
@@ -105,20 +121,19 @@ const Http = (() => {
       }
     } else if (auth.type === 'bearer') {
       const t = Vars.resolve(auth.bearer || '', env, ctx);
-      if (t) { headers['Authorization'] = 'Bearer ' + t; injected = { where: 'header', name: 'Authorization' }; }
+      if (t) { setHeader('Authorization', 'Bearer ' + t); injected = { where: 'header', name: 'Authorization' }; }
     } else if (auth.type === 'basic') {
       const u = Vars.resolve(auth.username || '', env, ctx);
       const p = Vars.resolve(auth.password || '', env, ctx);
-      headers['Authorization'] = 'Basic ' + btoa(unescape(encodeURIComponent(`${u}:${p}`)));
-      injected = { where: 'header', name: 'Authorization' };
-    } else if (auth.type === 'apikey') {
+      setHeader('Authorization', 'Basic ' + btoa(unescape(encodeURIComponent(`${u}:${p}`))));
+      injected = { where: 'header', name: 'Authorization' };    } else if (auth.type === 'apikey') {
       const k = Vars.resolve(auth.apiKey || '', env, ctx);
       const v = Vars.resolve(auth.apiValue || '', env, ctx);
       if (k) {
         if (auth.apiIn === 'query') {
           holder.url += (holder.url.includes('?') ? '&' : '?') + encodeURIComponent(k) + '=' + encodeURIComponent(v);
         } else {
-          headers[k] = v;
+          setHeader(k, v);
         }
         injected = { where: auth.apiIn || 'header', name: k };
       }

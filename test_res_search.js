@@ -133,6 +133,15 @@ check('搜索框显示出来（hidden=false）', searchEl.hidden === false);
 check('自动聚焦输入框', filterEl.focused === 1);
 check('并选中已有内容方便直接重输', filterEl.selected === 1);
 
+// 发送中会整体隐藏工具栏（含搜索框），此时不能把焦点塞进看不见的输入框
+toolbarEl.hidden = true;
+searchEl.hidden = true;
+filterEl.focused = 0;
+check('工具栏隐藏（正在发送）→ 不接管', Response.openSearch() === false);
+check('…且不会把焦点塞进隐藏的输入框', filterEl.focused === 0);
+check('…搜索框保持隐藏', searchEl.hidden === true);
+toolbarEl.hidden = false;
+
 searchEl.hidden = true;
 currentTab = { lastResponse: { res: mkRes({ error: '连接被拒绝' }) } };
 check('请求失败（无 body）→ 不接管', Response.openSearch() === false);

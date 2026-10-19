@@ -578,6 +578,10 @@ const Response = (() => {
     const search = U.$('#resSearch');
     const input = U.$('#resFilter');
     if (!search || !input) return false;
+    // 工具栏整体隐藏时（正在发送 / 无响应）不接管：
+    // 否则会把焦点塞进一个看不见的输入框，用户按了 Ctrl+F 却什么都没发生
+    const toolbar = U.$('#resBodyToolbar');
+    if (!toolbar || toolbar.hidden) return false;
     const panel = U.$('.res-panel[data-sp="body"]');
     if (!panel || !panel.classList.contains('active')) return false;
     const res = currentRes();

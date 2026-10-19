@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('api', {
   cancel: (reqId) => ipcRenderer.invoke('http:cancel', reqId),
   loadStore: () => ipcRenderer.invoke('store:load'),
   saveStore: (data) => ipcRenderer.invoke('store:save', data),
+  // 退出前同步落盘（防止防抖窗口内的改动丢失）
+  saveStoreSync: (data) => ipcRenderer.sendSync('store:save-sync', data),
   openDialog: (opts) => ipcRenderer.invoke('dialog:open', opts),
   saveDialog: (opts) => ipcRenderer.invoke('dialog:save', opts),
   appInfo: () => ipcRenderer.invoke('app:info'),

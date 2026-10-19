@@ -104,6 +104,20 @@ console.log('\nAuth.doLogin：登录请求也带环境 Header');
   await Auth.login(envLogin2);
   check('登录自有 Header 覆盖同名环境 Header', sent[0].headers['x-current-project'] === 'LOGIN-WINS');
 
+  console.log('\nHttp.build：Header 名大小写不敏感');
+  const caseEnv = mkEnv([{ key: 'x-current-project', value: 'ENV', enabled: true }]);
+  const builtC = Http.build(mkReq([{ key: 'X-Current-Project', value: 'REQ', enabled: true }]), caseEnv);
+  const cKeys = Object.keys(builtC.config.headers).filter((k) => k.toLowerCase() === 'x-current-project');
+  check('大小写不同也只保留一个头（不会重复发）', cKeys.length === 1, cKeys.join(','));
+  check('…且以请求自己的值为准', builtC.config.headers[cKeys[0]] === 'REQ');
+  check('…被请求覆盖后不再声称「环境自动携带」', !builtC.notes.some((n) => n.includes('x-current-project')));
+
+  const builtD = Http.build(mkReq([]), caseEnv);
+  const dKeys = Object.keys(builtD.config.headers).filter((k) => k.toLowerCase() === 'x-current-project');
+  check('没被覆盖时仍只保留一个头（保持原大小写）',
+    dKeys.length === 1 && builtD.config.headers[dKeys[0]] === 'ENV', dKeys.join(','));
+  check('…并正常提示来自环境', builtD.notes.some((n) => n.includes('自动携带')));
+
   console.log('\n源码就位检查');
   const envCode = loadSrc('env.js');
   const storeCode = loadSrc('store.js');

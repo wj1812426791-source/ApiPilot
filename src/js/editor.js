@@ -703,11 +703,25 @@ const Editor = (() => {
     btn.textContent = '发送';
   }
 
+  /**
+   * 展示响应：结果始终存进发起请求的那个标签；
+   * 若响应回来时用户已经切到别的标签，就不能把 A 的响应画到 B 上 ——
+   * 此时把当前标签自己的（旧）响应恢复回来。
+   */
+  function showResponse(res, meta, tab) {
+    Response.show(res, meta, tab);
+    const now = current();
+    if (now && now !== tab) Response.restore(now);
+  }
+
   async function send() {
     const tab = current();
     const req = currentReq();
-    if (!req || sending) return;
-
+    if (!req) return;
+    if (sending) {
+      UI.toast('上一次请求还在进行中，可先点「取消」再发', 'warn', 2400);
+      return;
+    }
     sending = true;
     canceling = false;
     sendingReqId = U.uid('rsent');
@@ -723,12 +737,12 @@ const Editor = (() => {
       });
 
       if (res && res.canceled) {
-        Response.show({ error: '请求已取消', canceled: true, timeMs: Date.now() - started }, {}, tab);
+        showResponse({ error: '请求已取消', canceled: true, timeMs: Date.now() - started }, {}, tab);
         UI.toast('已取消本次请求', 'warn', 1800);
         return;
       }
 
-      Response.show(res, meta, tab);
+      showResponse(res, meta, tab);
 
       if (meta.loginError) {
         UI.toast('自动登录失败：' + meta.loginError, 'err', 5000);
@@ -750,7 +764,7 @@ const Editor = (() => {
       Tree.renderHistory();
       App.refreshTokenChip();
     } catch (e) {
-      Response.show({ error: e.message || String(e) }, {}, tab);
+      showResponse({ error: e.message || String(e) }, {}, tab);
     } finally {
       sending = false;
       sendingReqId = null;

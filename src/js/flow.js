@@ -1051,7 +1051,14 @@ const Flow = (() => {
     });
   }
 
+  /** 运行中标志：避免连点「运行」/ Ctrl+Enter 把同一条流程并发跑两遍（批量删除会重复执行） */
+  let flowRunning = false;
+
   async function runFlow(flow) {
+    if (flowRunning) {
+      UI.toast('流程正在运行中，请等这次跑完', 'warn', 1800);
+      return;
+    }
     if (!flow) {
       const tab = current();
       flow = tab && tab.draft;
@@ -1061,6 +1068,8 @@ const Flow = (() => {
       return;
     }
 
+    flowRunning = true;
+    try {
     const env = Store.activeEnv();
     const started = Date.now();
     const ctx = { stepResults: [] };
@@ -1126,6 +1135,9 @@ const Flow = (() => {
 
     renderFlowResult({ ok: true, timeMs: Date.now() - started, stepResults });
     UI.toast('流程运行完成', 'ok');
+    } finally {
+      flowRunning = false;
+    }
   }
 
   /* ------------------------------------------------------------------

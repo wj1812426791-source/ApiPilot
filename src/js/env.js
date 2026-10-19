@@ -138,7 +138,10 @@ const Env = (() => {
           if (!await UI.confirm(`确定删除环境「${env.name}」？`, { title: '删除环境', danger: true, okText: '删除' })) return;
           Store.state.environments = Store.state.environments.filter((e) => e.id !== env.id);
           if (Store.state.activeEnvId === env.id) Store.state.activeEnvId = Store.state.environments[0].id;
-          selectedId = Store.state.environments[0].id;
+          // 删的不是当前选中的那个，就别把选中抢走
+          if (!Store.state.environments.some((e) => e.id === selectedId)) {
+            selectedId = Store.state.environments[0].id;
+          }
           Store.save();
           App.refreshEnvSelect();
           reRender();

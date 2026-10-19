@@ -442,6 +442,18 @@ ipcMain.handle('store:save', async (_evt, data) => {
   }
 });
 
+// 关闭窗口前同步落盘：渲染进程的保存有 400ms 防抖，直接关窗会丢掉最后那点改动
+ipcMain.on('store:save-sync', (evt, data) => {
+  try {
+    const txt = JSON.stringify(data, null, 2);
+    fs.writeFileSync(STORE_FILE + '.tmp', txt, 'utf8');
+    fs.renameSync(STORE_FILE + '.tmp', STORE_FILE);
+    evt.returnValue = { ok: true };
+  } catch (e) {
+    evt.returnValue = { ok: false, error: e.message };
+  }
+});
+
 ipcMain.handle('dialog:open', async (_evt, opts) => {
   const res = await dialog.showOpenDialog(mainWindow, opts || {});
   if (res.canceled || !res.filePaths.length) return { ok: false };

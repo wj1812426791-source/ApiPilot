@@ -124,20 +124,39 @@ const Store = (() => {
     };
   }
 
+  let pendingSave = false;
+
   function save() {
+    pendingSave = true;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
       if (saveInFlight) { save(); return; }
       saveInFlight = true;
       try {
         const res = await window.api.saveStore(serialize());
-        if (!res.ok) console.error('保存失败:', res.error);
+        if (res.ok) pendingSave = false;
+        else console.error('保存失败:', res.error);
       } catch (e) {
         console.error('保存异常:', e);
       } finally {
         saveInFlight = false;
       }
     }, 400);
+  }
+
+  /** 退出前同步落盘：保存有 400ms 防抖，改完立刻关窗会丢掉最后那点改动 */
+  function flushSync() {
+    if (!pendingSave) return true;
+    clearTimeout(saveTimer);
+    try {
+      if (window.api && window.api.saveStoreSync) {
+        const res = window.api.saveStoreSync(serialize());
+        if (res && res.ok) { pendingSave = false; return true; }
+      }
+    } catch (e) {
+      console.error('退出前保存失败:', e);
+    }
+    return false;
   }
 
   async function load() {
@@ -308,8 +327,15 @@ const Store = (() => {
     save();
   }
 
+  // 关窗前把还没落盘的改动同步写掉（防抖 400ms 内关窗不会丢）
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('beforeunload', () => {
+      try { flushSync(); } catch (_) { /* 退出路径上尽力而为 */ }
+    });
+  }
+
   return {
-    state, save, load,
+    state, save, load, flushSync,
     newRequest, newFolder, newCollection, newEnvironment, newFlow, newFlowFolder, newFlowStep,
     DEFAULT_LOGIN, DEFAULT_TOKEN,
     walk, findNode, findRequest, findFlow, findFlowParent, moveFlow, findOwnerCollection, removeNode,
