@@ -303,6 +303,25 @@ const Response = (() => {
     }
 
     if (viewMode === 'raw') {
+      if (filterPath) {
+        // Raw 里的 JSON 往往是一整行，按"行"过滤等于没过滤 —— 改成截取命中位置附近的上下文
+        const { snippets, count } = filterSnippets(text, filterPath);
+        content.appendChild(U.el('div', { class: 'fuzzy-head' }, [
+          U.el('b', { text: `Raw 视图：包含「${filterPath}」的片段` }),
+          U.el('span', { class: 'fuzzy-sub', text: count ? ` 命中 ${count} 处` : ' 没有命中' })
+        ]));
+        if (!count) {
+          content.appendChild(U.el('div', { class: 'res-placeholder' }, [
+            U.el('p', { text: 'Raw 内容里没有包含该关键字的片段' })
+          ]));
+          return;
+        }
+        content.appendChild(U.el('pre', { class: 'code', text: snippets.join('\n\n') }));
+        if (count > snippets.length) {
+          content.appendChild(U.el('div', { class: 'sr-hint', text: `共 ${count} 处，这里只显示前 ${snippets.length} 处` }));
+        }
+        return;
+      }
       content.appendChild(U.el('pre', { class: 'code', text }));
       return;
     }
@@ -432,6 +451,32 @@ const Response = (() => {
 
     walkNode(root, '');
     return hits;
+  }
+
+  /**
+   * 在长文本里找关键字，返回「命中位置 + 前后上下文」的片段。
+   * Raw 视图里的 JSON 通常是一整行，按行过滤等于没过滤，所以按字符位置截取。
+   */
+  function filterSnippets(text, filter, { before = 60, after = 140, max = 20 } = {}) {
+    const src = String(text == null ? '' : text);
+    const needle = String(filter || '').toLowerCase();
+    if (!needle) return { snippets: [], count: 0 };
+    const lower = src.toLowerCase();
+    const snippets = [];
+    let idx = 0;
+    let count = 0;
+    while (true) {
+      const i = lower.indexOf(needle, idx);
+      if (i < 0) break;
+      count++;
+      if (snippets.length < max) {
+        const start = Math.max(0, i - before);
+        const end = Math.min(src.length, i + needle.length + after);
+        snippets.push((start > 0 ? '…' : '') + src.slice(start, end) + (end < src.length ? '…' : ''));
+      }
+      idx = i + needle.length;
+    }
+    return { snippets, count };
   }
 
   function previewValue(v) {
@@ -669,6 +714,6 @@ const Response = (() => {
   return {
     show, restore, bind, showSending, endSending,
     openSearch, closeSearch, resetSearch,
-    fuzzyFind, previewValue, normalizeSent, bodyPreviewText
+    fuzzyFind, filterSnippets, previewValue, normalizeSent, bodyPreviewText
   };
 })();

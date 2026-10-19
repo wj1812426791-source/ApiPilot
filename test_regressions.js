@@ -71,11 +71,23 @@ beforeUnloadHandlers[0]();
 check('关闭窗口时自动 flush', syncCalls === 1, 'calls=' + syncCalls);
 
 /* ------------------------------ 2. 流程并发保护 ------------------------------ */
-console.log('\n[2] 流程运行并发保护');
+console.log('\n[2] 流程运行并发保护 / 取消');
 const flowSrc = loadSrc('flow.js');
 check('有 flowRunning 运行中标志', /let flowRunning = false/.test(flowSrc));
 check('运行中再次触发会提示并返回', /if \(flowRunning\)[\s\S]{0,160}return;/.test(flowSrc));
-check('用 try/finally 保证异常后也能复位', /flowRunning = true;[\s\S]{0,40}try \{/.test(flowSrc) && /finally \{\s*flowRunning = false;/.test(flowSrc));
+check('用 try/finally 保证异常后也能复位',
+  /flowRunning = true;[\s\S]{0,160}try \{/.test(flowSrc) && /finally \{\s*flowRunning = false;/.test(flowSrc));
+
+check('有 flowReqId / flowCanceled 状态', /let flowReqId = null/.test(flowSrc) && /let flowCanceled = false/.test(flowSrc));
+check('每次请求都带 reqId（主进程才能中止）',
+  /const rid = U\.uid\('frun'\)[\s\S]{0,120}Http\.send\(itStep, \{ env, ctx, reqId: rid \}\)/.test(flowSrc));
+check('收到 canceled 就停掉后续步骤', /if \(res && res\.canceled\)[\s\S]{0,200}flowCanceled = true/.test(flowSrc));
+check('两层循环都检查 flowCanceled', (flowSrc.match(/if \(flowCanceled\) break;/g) || []).length >= 2);
+check('cancelRun 会调用主进程取消', /async function cancelRun\(\)[\s\S]{0,320}window\.api\.cancel\(rid\)/.test(flowSrc));
+check('运行按钮运行中变「取消运行」', /btn\.innerHTML = '<span class="spin"><\/span> 取消运行'/.test(flowSrc));
+check('按钮点击分流：运行中→取消', /if \(flowRunning\) cancelRun\(\);[\s\S]{0,60}else runFlow\(\);/.test(flowSrc));
+check('结果区支持「已取消」标题', /result\.canceled \? '⏹ 流程已取消'/.test(flowSrc));
+check('导出 cancelRun / isRunning', /cancelRun,[\s\S]{0,80}isRunning: \(\) => flowRunning/.test(flowSrc));
 
 /* ------------------------------ 3. 响应不串台 ------------------------------ */
 console.log('\n[3] 响应回包时的标签归属');

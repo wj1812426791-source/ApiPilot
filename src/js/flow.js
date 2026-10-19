@@ -969,7 +969,10 @@ const Flow = (() => {
 
     const totalRuns = (result.stepResults || []).reduce((n, s) => n + (s.runCount || 1), 0);
     const head = U.el('div', { class: 'flow-result-head' }, [
-      U.el('span', { text: result.ok ? '✅ 流程运行完成' : '❌ 流程运行失败', style: 'font-weight:600' }),
+      U.el('span', {
+        text: result.canceled ? '⏹ 流程已取消' : result.ok ? '✅ 流程运行完成' : '❌ 流程运行失败',
+        style: 'font-weight:600'
+      }),
       U.el('span', { class: 'spacer' }),
       U.el('span', { class: 'muted-sm', text: `${result.stepResults.length} 步 · ${totalRuns} 次请求 · 耗时 ${U.fmtTime(result.timeMs)}` })
     ]);
@@ -1053,6 +1056,42 @@ const Flow = (() => {
 
   /** 运行中标志：避免连点「运行」/ Ctrl+Enter 把同一条流程并发跑两遍（批量删除会重复执行） */
   let flowRunning = false;
+  /** 当前正在跑的请求 id（供「取消运行」中止）；两次请求之间为 null */
+  let flowReqId = null;
+  /** 用户点了取消：当前请求被中止、后续步骤不再执行 */
+  let flowCanceled = false;
+
+  /** 运行中把按钮变成「取消运行」 */
+  function renderRunBusy() {
+    const btn = U.$('#btnRunFlow');
+    if (!btn) return;
+    btn.classList.add('sending');
+    btn.disabled = false;
+    btn.title = '点击取消本次流程运行';
+    btn.innerHTML = '<span class="spin"></span> 取消运行';
+  }
+
+  function resetRunButton() {
+    const btn = U.$('#btnRunFlow');
+    if (!btn) return;
+    btn.classList.remove('sending');
+    btn.disabled = false;
+    btn.title = '';
+    btn.textContent = '运行流程';
+  }
+
+  /** 取消正在运行的流程：中止当前请求，后续步骤不再执行 */
+  async function cancelRun() {
+    if (!flowRunning) return false;
+    flowCanceled = true;
+    const rid = flowReqId;
+    if (rid) {
+      try { await window.api.cancel(rid); } catch (_) { /* 取消失败也让后续步骤停掉 */ }
+    }
+    const btn = U.$('#btnRunFlow');
+    if (btn) btn.innerHTML = '<span class="spin"></span> 取消中…';
+    return true;
+  }
 
   async function runFlow(flow) {
     if (flowRunning) {
@@ -1069,6 +1108,9 @@ const Flow = (() => {
     }
 
     flowRunning = true;
+    flowCanceled = false;
+    flowReqId = null;
+    renderRunBusy();
     try {
     const env = Store.activeEnv();
     const started = Date.now();
@@ -1078,6 +1120,7 @@ const Flow = (() => {
     renderFlowResult(null);
 
     for (let i = 0; i < flow.steps.length; i++) {
+      if (flowCanceled) break;
       const step = flow.steps[i];
       const iterations = buildStepIterations(step);
       UI.toast(`流程运行中… 第 ${i + 1}/${flow.steps.length} 步` +
@@ -1088,8 +1131,21 @@ const Flow = (() => {
       let last = null;
 
       for (const itStep of iterations) {
+        if (flowCanceled) break;
         try {
-          const { res, meta, config } = await Http.send(itStep, { env, ctx });
+          // 每次请求单独一个 id：主进程据此能真正中止这条 HTTP 请求
+          const rid = U.uid('frun');
+          flowReqId = rid;
+          const { res, meta, config } = await Http.send(itStep, { env, ctx, reqId: rid });
+          if (flowReqId === rid) flowReqId = null;
+          if (res && res.canceled) {
+            flowCanceled = true;
+            const run = { name: step.name, method: step.method, response: { error: '已取消', canceled: true }, meta: {} };
+            runs.push(run);
+            last = run;
+            stepOk = false;
+            break;
+          }
           const parsed = U.tryParseJSON(res.bodyText || '');
           const run = {
             name: step.name,
@@ -1127,16 +1183,26 @@ const Flow = (() => {
       FlowRuntime && FlowRuntime.setStepResult(step.id, last);
 
       if (!stepOk) {
+        if (flowCanceled) break;   // 取消造成的"失败"不报错，交给下面统一提示
         renderFlowResult({ ok: false, timeMs: Date.now() - started, stepResults });
         UI.toast(`第 ${i + 1} 步失败`, 'err', 4000);
         return;
       }
     }
 
+    if (flowCanceled) {
+      renderFlowResult({ ok: false, canceled: true, timeMs: Date.now() - started, stepResults });
+      UI.toast('流程已取消（后续步骤未执行）', 'warn', 2600);
+      return;
+    }
+
     renderFlowResult({ ok: true, timeMs: Date.now() - started, stepResults });
     UI.toast('流程运行完成', 'ok');
     } finally {
       flowRunning = false;
+      flowReqId = null;
+      flowCanceled = false;
+      resetRunButton();
     }
   }
 
@@ -1160,7 +1226,10 @@ const Flow = (() => {
       markDirty();
     });
 
-    U.$('#btnRunFlow').addEventListener('click', () => runFlow());
+    U.$('#btnRunFlow').addEventListener('click', () => {
+      if (flowRunning) cancelRun();
+      else runFlow();
+    });
 
     U.$('#btnCreateFirstFlow').addEventListener('click', () => newFlow());
 
@@ -1189,6 +1258,7 @@ const Flow = (() => {
   }
 
   return {
-    bind, renderList, renderCurrent, current, openFlow, runFlow, buildStepIterations, FlowRuntime
+    bind, renderList, renderCurrent, current, openFlow, runFlow, cancelRun,
+    isRunning: () => flowRunning, buildStepIterations, FlowRuntime
   };
 })();

@@ -277,5 +277,33 @@ check('…而是聚焦集合搜索框', sideSearchEl.focused === 1);
 check('app.js 的 Ctrl+F 分支调用 Response.openSearch', /k === 'f'[\s\S]{0,420}Response\.openSearch/.test(loadSrc('app.js')));
 check('Ctrl+F 分支会判断是否点在侧栏', /k === 'f'[\s\S]{0,260}#sidebar/.test(loadSrc('app.js')));
 
+/* ------------------------------ 7. Raw 视图过滤 ------------------------------ */
+console.log('\n[7] Raw 视图：按命中位置截取上下文片段');
+const rawBody = '{"code":200,"data":{"houseType":"3","roomID":"abc"},"msg":"ok"}';
+const s1 = Response.filterSnippets(rawBody, 'houseType');
+check('命中 1 处', s1.count === 1, 'count=' + s1.count);
+check('片段里含关键字', s1.snippets[0].includes('houseType'), s1.snippets[0]);
+check('片段带前后上下文（不是只有关键字）', s1.snippets[0].includes('"code":200'), s1.snippets[0]);
+
+const s2 = Response.filterSnippets('aaa aaa aaa', 'aaa', { max: 2 });
+check('超过上限只保留 max 个片段，但 count 仍是总数',
+  s2.snippets.length === 2 && s2.count === 3, `${s2.snippets.length}/${s2.count}`);
+
+const s3 = Response.filterSnippets(rawBody, '不存在的词');
+check('没命中 → count=0 且无片段', s3.count === 0 && s3.snippets.length === 0);
+check('空关键字 → 不产生片段', Response.filterSnippets(rawBody, '').count === 0);
+
+check('大小写不敏感', Response.filterSnippets(rawBody, 'HOUSETYPE').count === 1);
+
+const longText = 'x'.repeat(200) + 'NEEDLE' + 'y'.repeat(200);
+const s4 = Response.filterSnippets(longText, 'needle', { before: 10, after: 10 });
+check('超长文本只截上下文（不会把整段吐出来）', s4.snippets[0].length < 60, 'len=' + s4.snippets[0].length);
+check('两端都补了省略号', s4.snippets[0].startsWith('…') && s4.snippets[0].endsWith('…'));
+
+check('Raw 分支已接上片段过滤',
+  /viewMode === 'raw'[\s\S]{0,700}filterSnippets\(text, filterPath\)/.test(loadSrc('response.js')));
+check('Raw 无命中时给出明确提示',
+  /Raw 内容里没有包含该关键字的片段/.test(loadSrc('response.js')));
+
 console.log('\n结果：' + passed + ' 通过 / ' + failed + ' 失败');
 process.exit(failed ? 1 : 0);

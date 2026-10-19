@@ -1024,3 +1024,7 @@ pre.code.nowrap { white-space: pre; }
   margin-left: 8px; padding: 0 5px; border-radius: 3px; font-family: var(--mono);
   font-size: 10.5px; color: var(--text-3); background: var(--bg-2); border: 1px solid var(--border);
 }
+
+/* 流程运行中：运行按钮变红「取消运行」 */
+#btnRunFlow.sending { background: #e5484d; border-color: #e5484d; color: #fff; }
+#btnRunFlow.sending:hover { background: #cf3a3f; border-color: #cf3a3f; }
