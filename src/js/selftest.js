@@ -273,6 +273,50 @@ const SelfTest = (() => {
     const styled = getComputedStyle(U.$('.titlebar')).backgroundColor;
     check('样式表已生效', styled && styled !== 'rgba(0, 0, 0, 0)', styled);
 
+    /* 15b. Ctrl+F 分流：在响应体里按应打开响应体搜索（回归：曾落到集合搜索） */
+    const cfTab = Editor.current();
+    if (cfTab) {
+      Response.show({
+        status: 200, statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+        bodyText: '{"houseType":"3","roomID":"abc"}', timeMs: 3
+      }, {}, cfTab);
+      const bodyTabBtn = U.$('.res-tab[data-st="body"]');
+      if (bodyTabBtn) bodyTabBtn.click();
+
+      const clickTarget = U.$('#resContent pre') || U.$('#resContent');
+      clickTarget.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true }));
+
+      const bodyPanel = U.$('.res-panel[data-sp="body"]');
+      const diag = `toolbarHidden=${U.$('#resBodyToolbar').hidden}`
+        + ` active=${!!(bodyPanel && bodyPanel.classList.contains('active'))}`
+        + ` hasRes=${!!(cfTab.lastResponse && cfTab.lastResponse.res)}`;
+      check('Ctrl+F 在响应体里打开响应搜索', U.$('#resSearch').hidden === false, diag);
+      check('…焦点落在响应体搜索框', document.activeElement === U.$('#resFilter'),
+        document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : 'null');
+      Response.closeSearch();
+    }
+
+    /* 15c. Ctrl+F 在请求 Body 里 → 打开 Body 查找条（而不是集合搜索） */
+    const cfReq = Editor.currentReq && Editor.currentReq();
+    if (cfReq) {
+      const reqBodyTab = U.$('.req-tab[data-rt="body"]');
+      if (reqBodyTab) reqBodyTab.click();
+      cfReq.body = { mode: 'raw', raw: '{"a":1,"houseType":"3"}', rawType: 'application/json', formdata: [], urlencoded: [] };
+      Editor.renderCurrent();
+      const rawEl = U.$('#rawBody');
+      (rawEl || U.$('.req-panel[data-rp="body"]')).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true }));
+      const findBar = U.$('#bodyFindBar');
+      check('Ctrl+F 在请求 Body 里打开查找条', !!findBar && findBar.hidden === false,
+        findBar ? `hidden=${findBar.hidden}` : '未创建');
+      check('…焦点落在 Body 查找框',
+        !!document.activeElement && String(document.activeElement.className || '').includes('body-find-input'),
+        document.activeElement ? (document.activeElement.id || document.activeElement.className) : 'null');
+      Editor.closeBodyFind();
+    }
+
     /* 16. 测试流程 */
     const flow = Store.newFlow('自检测试流程');
     const step1 = Store.newFlowStep({ name: '新增项目', method: 'POST', url: '{{baseUrl}}/api/echo', body: { mode: 'raw', raw: '{"data":{"f_Id":"FLOW_001"}}', rawType: 'application/json', formdata: [], urlencoded: [] } });

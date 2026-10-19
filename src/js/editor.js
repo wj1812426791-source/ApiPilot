@@ -672,6 +672,136 @@ const Editor = (() => {
   }
 
   /* ==================================================================
+     请求 Body 内查找（Ctrl+F）
+     响应区那套是"过滤响应"，这里是在你正在编辑的 Body 里找字符串
+     ================================================================== */
+  let bodyFindBar = null;
+  let bodyFindHits = [];
+  let bodyFindIdx = -1;
+  let bodyFindQuery = '';
+
+  /** 纯函数：返回所有命中位置（不区分大小写），便于单测 */
+  function findHitsInText(text, q) {
+    const src = String(text == null ? '' : text);
+    const needle = String(q || '');
+    if (!needle) return [];
+    const lower = src.toLowerCase();
+    const n = needle.toLowerCase();
+    const hits = [];
+    let i = 0;
+    while (true) {
+      const idx = lower.indexOf(n, i);
+      if (idx < 0) break;
+      hits.push(idx);
+      i = idx + n.length;
+    }
+    return hits;
+  }
+
+  function snippetOf(text, start, len) {
+    const s = Math.max(0, start - 24);
+    const e = Math.min(text.length, start + len + 36);
+    return (s > 0 ? '…' : '') + text.slice(s, e).replace(/\s*\n\s*/g, ' ⏎ ') + (e < text.length ? '…' : '');
+  }
+
+  function ensureBodyFindBar() {
+    if (bodyFindBar && bodyFindBar.isConnected !== false) return bodyFindBar;
+    const input = U.el('input', {
+      class: 'input mono body-find-input', type: 'text', spellcheck: 'false',
+      placeholder: '在请求 Body 里查找'
+    });
+    const info = U.el('span', { class: 'body-find-info', text: '' });
+    const preview = U.el('span', { class: 'body-find-preview', text: '' });
+    const prev = U.el('button', { class: 'mini-btn', type: 'button', text: '↑', title: '上一个（Shift+Enter）' });
+    const next = U.el('button', { class: 'mini-btn', type: 'button', text: '↓', title: '下一个（Enter）' });
+    const close = U.el('button', { class: 'body-find-close', type: 'button', text: '×', title: '关闭（Esc）' });
+    const bar = U.el('div', { class: 'body-find', id: 'bodyFindBar', hidden: true },
+      [input, info, preview, prev, next, close]);
+
+    input.addEventListener('input', () => runBodyFind(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); stepBodyFind(e.shiftKey ? -1 : 1); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeBodyFind(); }
+    });
+    prev.addEventListener('click', () => stepBodyFind(-1));
+    next.addEventListener('click', () => stepBodyFind(1));
+    close.addEventListener('click', () => closeBodyFind());
+
+    const host = U.$('#bodyRaw');
+    if (host) host.insertBefore(bar, host.firstChild);
+    bodyFindBar = bar;
+    return bar;
+  }
+
+  function applyBodyFindHighlight() {
+    const raw = U.$('#rawBody');
+    const bar = bodyFindBar;
+    if (!raw || !bar || !bodyFindHits.length) return;
+    const start = bodyFindHits[bodyFindIdx];
+    try { raw.setSelectionRange(start, start + bodyFindQuery.length); } catch (_) { /* 忽略 */ }
+    // 不抢焦点（用户还要继续在搜索框里打字），只把大致位置滚到视野里
+    const line = raw.value.slice(0, start).split('\n').length;
+    raw.scrollTop = Math.max(0, (line - 3) * 18);
+    const info = bar.querySelector('.body-find-info');
+    const preview = bar.querySelector('.body-find-preview');
+    if (info) info.textContent = `${bodyFindIdx + 1}/${bodyFindHits.length}`;
+    if (preview) preview.textContent = snippetOf(raw.value, start, bodyFindQuery.length);
+  }
+
+  function runBodyFind(q) {
+    const raw = U.$('#rawBody');
+    if (!raw) return;
+    bodyFindQuery = String(q || '');
+    bodyFindHits = findHitsInText(raw.value, bodyFindQuery);
+    const bar = bodyFindBar;
+    const info = bar && bar.querySelector('.body-find-info');
+    const preview = bar && bar.querySelector('.body-find-preview');
+    if (!bodyFindQuery) {
+      bodyFindIdx = -1;
+      if (info) info.textContent = '';
+      if (preview) preview.textContent = '';
+      return;
+    }
+    if (!bodyFindHits.length) {
+      bodyFindIdx = -1;
+      if (info) info.textContent = '无匹配';
+      if (preview) preview.textContent = '';
+      return;
+    }
+    bodyFindIdx = 0;
+    applyBodyFindHighlight();
+  }
+
+  function stepBodyFind(dir) {
+    if (!bodyFindHits.length) return;
+    bodyFindIdx = (bodyFindIdx + dir + bodyFindHits.length) % bodyFindHits.length;
+    applyBodyFindHighlight();
+  }
+
+  /** 唤出请求 Body 查找条；当前不是 raw 模式（文本域不可见）时返回 false */
+  function openBodyFind() {
+    const raw = U.$('#rawBody');
+    const host = U.$('#bodyRaw');
+    // 用 hidden 属性判断（窗口不显示时 offsetParent 不可靠）
+    if (!raw || !host || host.hidden) return false;
+    const bar = ensureBodyFindBar();
+    if (!bar) return false;
+    bar.hidden = false;
+    const input = bar.querySelector('.body-find-input');
+    if (input) { input.focus(); input.select(); }
+    runBodyFind(input ? input.value : '');
+    return true;
+  }
+
+  function closeBodyFind() {
+    if (bodyFindBar) bodyFindBar.hidden = true;
+    bodyFindHits = [];
+    bodyFindIdx = -1;
+    const raw = U.$('#rawBody');
+    if (raw) raw.focus();   // 焦点还给文本域，选区还在，可直接 Ctrl+C
+  }
+
+  /* ==================================================================
      发送
      ================================================================== */
   let sending = false;
@@ -939,6 +1069,7 @@ const Editor = (() => {
     liveReq, isDirty,
     bind, renderKV, renderTabs, renderCurrent, renderAuth, renderAutoHeaders, syncUrlHighlight,
     openRequest, openFromHistory, newTab, closeTab, closeTabsByRef,
-    current, currentReq, currentRefId, save, saveAs, send, markDirty, updateCounts
+    current, currentReq, currentRefId, save, saveAs, send, markDirty, updateCounts,
+    openBodyFind, closeBodyFind, findHitsInText
   };
 })();

@@ -167,7 +167,12 @@ const App = (() => {
       else if (k === 'l') { e.preventDefault(); U.$('#urlInput').select(); }
       else if (k === 'f') {
         e.preventDefault();
-        // 正在看响应体 → 唤出响应体搜索（平时隐藏）；点在集合树里 → 搜集合
+        // 1) 正在请求区 Body 里（焦点在编辑框，或刚点了 Body 面板）→ 在 Body 文本里查找
+        const onRawBody = !!(e.target && e.target.id === 'rawBody');
+        const inReqBody = !!(lastMouseTarget && typeof lastMouseTarget.closest === 'function'
+          && lastMouseTarget.closest('.req-panel[data-rp="body"]'));
+        if ((onRawBody || inReqBody) && Editor.openBodyFind && Editor.openBodyFind()) return;
+        // 2) 正在看响应体 → 唤出响应体搜索（平时隐藏）；点在集合树里 → 搜集合
         const inSidebar = !!(lastMouseTarget && typeof lastMouseTarget.closest === 'function'
           && lastMouseTarget.closest('#sidebar'));
         if (!inSidebar && Response && Response.openSearch && Response.openSearch()) return;

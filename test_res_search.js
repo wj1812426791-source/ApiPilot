@@ -274,8 +274,8 @@ fireKey('f');
 check('点在集合树里 → 不去调响应体搜索', openSearchCalls === 1);
 check('…而是聚焦集合搜索框', sideSearchEl.focused === 1);
 
-check('app.js 的 Ctrl+F 分支调用 Response.openSearch', /k === 'f'[\s\S]{0,420}Response\.openSearch/.test(loadSrc('app.js')));
-check('Ctrl+F 分支会判断是否点在侧栏', /k === 'f'[\s\S]{0,260}#sidebar/.test(loadSrc('app.js')));
+check('app.js 的 Ctrl+F 分支调用 Response.openSearch', /k === 'f'[\s\S]{0,900}Response\.openSearch/.test(loadSrc('app.js')));
+check('Ctrl+F 分支会判断是否点在侧栏', /k === 'f'[\s\S]{0,900}#sidebar/.test(loadSrc('app.js')));
 
 /* ------------------------------ 7. Raw 视图过滤 ------------------------------ */
 console.log('\n[7] Raw 视图：按命中位置截取上下文片段');
