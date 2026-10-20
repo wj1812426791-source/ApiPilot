@@ -106,6 +106,102 @@ const Editor = (() => {
     renderCurrent();
   }
 
+  /* ------------------------------------------------------------------
+     标签页右键菜单：关闭 / 关闭其他 / 关闭左侧 / 关闭右侧 / 关闭全部
+     ------------------------------------------------------------------ */
+  function showTabMenu(e, tab) {
+    if (e && e.preventDefault) e.preventDefault();
+    // 必须阻止冒泡：modal.js 在 document 上监听 contextmenu 会立刻把菜单藏掉
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    const tabs = Store.state.tabs.slice();
+    const idx = tabs.findIndex((t) => t.id === tab.id);
+    if (idx < 0) return;
+    const leftIds = new Set(tabs.slice(0, idx).map((t) => t.id));
+    const rightIds = new Set(tabs.slice(idx + 1).map((t) => t.id));
+
+    UI.contextMenu(e.clientX, e.clientY, [
+      { label: '关闭', shortcut: 'Ctrl+W', action: () => closeTab(tab.id) },
+      {
+        label: '关闭其他标签', disabled: tabs.length <= 1,
+        action: () => closeTabsWhere((t) => t.id !== tab.id, '关闭其他')
+      },
+      {
+        label: '关闭左侧标签', disabled: leftIds.size === 0,
+        action: () => closeTabsWhere((t) => leftIds.has(t.id), '关闭左侧')
+      },
+      {
+        label: '关闭右侧标签', disabled: rightIds.size === 0,
+        action: () => closeTabsWhere((t) => rightIds.has(t.id), '关闭右侧')
+      },
+      '-',
+      { label: '关闭全部标签', action: () => closeTabsWhere(() => true, '关闭全部') }
+    ]);
+  }
+
+  /** 批量关闭后该激活谁：优先右邻，其次左邻；当前没被关就保持不变 */
+  function pickActiveAfterClose(before, closedIds, activeId) {
+    const closed = closedIds instanceof Set ? closedIds : new Set(closedIds || []);
+    const remain = before.filter((t) => !closed.has(t.id));
+    if (!remain.length) return null;
+    if (remain.some((t) => t.id === activeId)) return activeId;
+    const idx = before.findIndex((t) => t.id === activeId);
+    if (idx >= 0) {
+      for (let i = idx + 1; i < before.length; i++) if (!closed.has(before[i].id)) return before[i].id;
+      for (let i = idx - 1; i >= 0; i--) if (!closed.has(before[i].id)) return before[i].id;
+    }
+    return remain[0].id;
+  }
+
+  /**
+   * 纯数据操作：按条件删除标签（不渲染、不弹窗）。
+   * 返回 { removed, activeId }，调用方负责写回 activeTabId 并重绘。
+   */
+  function removeTabsWhere(pred, activeId) {
+    const before = Store.state.tabs.slice();
+    const targets = before.filter(pred);
+    if (!targets.length) return { removed: 0, activeId };
+    const closed = new Set(targets.map((t) => t.id));
+    for (let i = Store.state.tabs.length - 1; i >= 0; i--) {
+      if (closed.has(Store.state.tabs[i].id)) Store.state.tabs.splice(i, 1);
+    }
+    return { removed: targets.length, activeId: pickActiveAfterClose(before, closed, activeId) };
+  }
+
+  /**
+   * 批量关闭标签：未保存的只确认一次（不是每个都弹一个框）。
+   * 关完若当前标签被关掉，优先激活右侧最近的幸存者，没有则激活左侧。
+   */
+  async function closeTabsWhere(pred, label) {
+    const targets = Store.state.tabs.filter(pred);
+    if (!targets.length) {
+      UI.toast('没有可关闭的标签', 'warn', 1600);
+      return 0;
+    }
+
+    const dirty = targets.filter((t) => t.dirty);
+    if (dirty.length) {
+      const names = dirty.slice(0, 3).map((t) => (t.draft && t.draft.name) || '未命名').join('、');
+      const ok = await UI.confirm(
+        `将关闭 ${targets.length} 个标签，其中 ${dirty.length} 个有未保存的修改` +
+        `（${names}${dirty.length > 3 ? ' 等' : ''}）。确定直接关闭吗？`,
+        { title: '未保存的修改', okText: '直接关闭', danger: true }
+      );
+      if (!ok) return 0;
+    }
+
+    const { removed, activeId } = removeTabsWhere(pred, Store.state.activeTabId);
+    Store.state.activeTabId = activeId;
+
+    Store.save();
+    renderTabs();
+    renderCurrent();
+    if (Flow && Flow.renderCurrent) Flow.renderCurrent();
+    Tree.render();
+    UI.toast(`已关闭 ${targets.length} 个标签（${label}）`, 'ok', 1800);
+    return targets.length;
+  }
+
   function renderTabs() {
     const box = U.$('#tabs');
     box.innerHTML = '';
@@ -117,7 +213,8 @@ const Editor = (() => {
         class: 'tab' + (active ? ' active' : ''),
         title: title,
         onClick: () => { Store.state.activeTabId = tab.id; Store.save(); renderTabs(); renderCurrent(); Flow && Flow.renderCurrent && Flow.renderCurrent(); Tree.render(); },
-        onMousedown: (e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } }
+        onMousedown: (e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.id); } },
+        onContextMenu: (e) => showTabMenu(e, tab)
       }, [
         isFlow
           ? U.el('span', { class: 'tab-method flow-icon', text: '流程' })
@@ -1070,6 +1167,7 @@ const Editor = (() => {
     bind, renderKV, renderTabs, renderCurrent, renderAuth, renderAutoHeaders, syncUrlHighlight,
     openRequest, openFromHistory, newTab, closeTab, closeTabsByRef,
     current, currentReq, currentRefId, save, saveAs, send, markDirty, updateCounts,
-    openBodyFind, closeBodyFind, findHitsInText
+    openBodyFind, closeBodyFind, findHitsInText,
+    closeTabsWhere, showTabMenu, pickActiveAfterClose, removeTabsWhere
   };
 })();

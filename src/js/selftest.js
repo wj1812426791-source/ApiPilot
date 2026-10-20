@@ -317,6 +317,26 @@ const SelfTest = (() => {
       Editor.closeBodyFind();
     }
 
+    /* 15d. 标签页右键菜单（关闭其他/左侧/右侧/全部） */
+    if (Store.state.tabs.length) {
+      const tabEl = U.$('#tabs .tab');
+      if (tabEl) {
+        tabEl.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true, cancelable: true, clientX: 120, clientY: 120
+        }));
+        const ctxMenu = U.$('#ctxMenu');
+        const labels = ctxMenu
+          ? [...ctxMenu.querySelectorAll('.ctx-item')].map((b) => b.textContent.trim())
+          : [];
+        check('标签页右键弹出菜单', !!ctxMenu && ctxMenu.hidden === false);
+        check('…含关闭其他/左侧/右侧/全部',
+          ['关闭其他标签', '关闭左侧标签', '关闭右侧标签', '关闭全部标签']
+            .every((t) => labels.some((l) => l.indexOf(t) >= 0)),
+          labels.join(' | '));
+        UI.hideContext();
+      }
+    }
+
     /* 16. 测试流程 */
     const flow = Store.newFlow('自检测试流程');
     const step1 = Store.newFlowStep({ name: '新增项目', method: 'POST', url: '{{baseUrl}}/api/echo', body: { mode: 'raw', raw: '{"data":{"f_Id":"FLOW_001"}}', rawType: 'application/json', formdata: [], urlencoded: [] } });
