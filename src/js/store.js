@@ -9,7 +9,7 @@ const Store = (() => {
     url: '{{baseUrl}}/login',
     headers: [{ key: 'Content-Type', value: 'application/json', desc: '', enabled: true }],
     bodyMode: 'raw',
-    bodyRaw: '{\n  "username": "admin",\n  "password": "123456"\n}',
+    bodyRaw: '{\n  "account": "{{account}}",\n  "password": "{{password}}"\n}',
     bodyItems: [],
     tokenPath: 'data.token',
     injectTo: 'header',
@@ -18,6 +18,9 @@ const Store = (() => {
     prefix: '',
     queryName: 'token',
     ttlSeconds: 7200,
+    // 过期方式：ttl=固定秒数；daily=每天固定时刻（服务端按自然日失效，如每天 0 点）
+    expiryMode: 'ttl',
+    dailyExpireAt: '00:00',
     expirePath: '',
     expireUnit: 'seconds',
     autoRelogin: true,
@@ -33,11 +36,16 @@ const Store = (() => {
     return {
       id: U.uid('env'),
       name,
+      // 预置几个常用变量，用不到可以删掉或取消勾选
       variables: [
-        { key: 'baseUrl', value: 'http://localhost:8080', desc: '服务地址', enabled: true }
+        { key: 'baseUrl', value: 'http://localhost:8080', desc: '服务地址', enabled: true },
+        { key: 'account', value: '', desc: '登录账号', enabled: true },
+        { key: 'password', value: '', desc: '登录密码', enabled: true }
       ],
-      // 环境 Header：该环境下的所有请求都会自动携带（如 x-current-project）
-      headers: [],
+      // 环境 Header：该环境下的所有请求都会自动携带（如 x-current-project），用不到可删/取消勾选
+      headers: [
+        { key: 'x-current-project', value: '', desc: '项目标识（按需填写）', enabled: true }
+      ],
       login: DEFAULT_LOGIN(),
       token: DEFAULT_TOKEN()
     };

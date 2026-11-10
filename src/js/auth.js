@@ -100,6 +100,21 @@ const Auth = (() => {
     return { value: '', from: '', error: '未能自动识别 token 字段，请手动填写提取路径' };
   }
 
+  /**
+   * 下一个「每天 HH:mm」的时间戳。
+   * 用于服务端按自然日让 token 失效的场景（例如每天 0 点过期）：
+   * 早 9 点登录不是 24 小时后失效，而是当天 24:00 失效。
+   */
+  function nextDailyExpiry(nowMs, hhmm) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || '00:00').trim());
+    const h = m ? Math.min(23, Math.max(0, parseInt(m[1], 10))) : 0;
+    const mi = m ? Math.min(59, Math.max(0, parseInt(m[2], 10))) : 0;
+    const d = new Date(nowMs);
+    d.setHours(h, mi, 0, 0);
+    if (d.getTime() <= nowMs) d.setDate(d.getDate() + 1);   // 今天这个点已过 → 算明天
+    return d.getTime();
+  }
+
   /** 计算过期时间戳 */
   function calcExpiresAt(res, login) {
     const now = Date.now();
@@ -120,6 +135,10 @@ const Auth = (() => {
           }
         }
       }
+    }
+    // 手动过期方式：固定秒数 / 每天固定时刻
+    if ((login.expiryMode || 'ttl') === 'daily') {
+      return nextDailyExpiry(now, login.dailyExpireAt || '00:00');
     }
     const ttl = Number(login.ttlSeconds);
     if (ttl > 0) return now + ttl * 1000;
@@ -289,6 +308,6 @@ const Auth = (() => {
 
   return {
     status, isValid, login, ensureToken, clearToken,
-    injectInto, shouldRelogin, extractToken, calcExpiresAt, COMMON_TOKEN_KEYS
+    injectInto, shouldRelogin, extractToken, calcExpiresAt, nextDailyExpiry, COMMON_TOKEN_KEYS
   };
 })();

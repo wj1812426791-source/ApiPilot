@@ -55,6 +55,25 @@ const check = (name, cond, extra) => {
   check('newEnvironment 继承默认 prefix 为空', env.login.prefix === '', JSON.stringify(env.login.prefix));
   check('两者不一致才会出问题：login 与 DEFAULT_LOGIN 同步', env.login.headerName === d.headerName && env.login.prefix === d.prefix);
 
+  /* -------------------- 1b. 新建环境的预置项 -------------------- */
+  console.log('\n[1b] 新建环境预置的变量 / Header / 登录体');
+  const envVarKeys = env.variables.map((v) => v.key);
+  check('预置 baseUrl / account / password 三个变量',
+    ['baseUrl', 'account', 'password'].every((k) => envVarKeys.includes(k)), envVarKeys.join(','));
+  check('预置 x-current-project 环境 Header',
+    env.headers.some((h) => h.key === 'x-current-project'),
+    env.headers.map((h) => h.key).join(','));
+  check('预置项都带 enabled 字段（可取消勾选）',
+    env.variables.every((v) => typeof v.enabled === 'boolean')
+    && env.headers.every((h) => typeof h.enabled === 'boolean'));
+  check('预置项就是一个普通数组（可删除）',
+    Array.isArray(env.variables) && Array.isArray(env.headers));
+  check('默认登录体用 {{account}} / {{password}}',
+    d.bodyRaw.includes('"account": "{{account}}"') && d.bodyRaw.includes('"password": "{{password}}"'),
+    d.bodyRaw.replace(/\n/g, ' '));
+  check('默认过期方式为固定秒数', (d.expiryMode || 'ttl') === 'ttl', d.expiryMode);
+  check('默认每日过期时刻 00:00', d.dailyExpireAt === '00:00', d.dailyExpireAt);
+
   /* -------------------- 2. 老数据不被覆盖 -------------------- */
   console.log('\n[2] 载入老数据：已保存的值必须原样保留');
   storeData = {
@@ -110,6 +129,46 @@ const check = (name, cond, extra) => {
   headers = { token: 'USER_SET' };
   const skip = Auth.injectInto(mkEnv('', 'token'), headers, { url: 'http://x/a' });
   check('请求自己写了同名头则尊重用户（不覆盖）', headers.token === 'USER_SET' && skip === null, headers.token);
+
+  /* -------------------- 3b. 每天固定时刻过期 -------------------- */
+  console.log('\n[3b] 每天固定时刻过期（服务端按自然日失效，如每天 0 点）');
+  const nd = Auth.nextDailyExpiry;
+  const at = (y, mo, day, h, mi) => new Date(y, mo - 1, day, h, mi, 0, 0).getTime();
+  const fmt = (ms) => {
+    const x = new Date(ms);
+    return `${x.getMonth() + 1}-${String(x.getDate()).padStart(2, '0')} ${String(x.getHours()).padStart(2, '0')}:${String(x.getMinutes()).padStart(2, '0')}`;
+  };
+
+  check('早 9 点登录 → 次日 00:00',
+    fmt(nd(at(2026, 11, 10, 9, 0), '00:00')) === '11-11 00:00', fmt(nd(at(2026, 11, 10, 9, 0), '00:00')));
+  check('23:50 登录 → 10 分钟后（次日 00:00）',
+    fmt(nd(at(2026, 11, 10, 23, 50), '00:00')) === '11-11 00:00');
+  check('正好 00:00 登录 → 算次日 00:00（不是立刻过期）',
+    fmt(nd(at(2026, 11, 10, 0, 0), '00:00')) === '11-11 00:00');
+  check('自定义 18:30，上午 10 点 → 当天 18:30',
+    fmt(nd(at(2026, 11, 10, 10, 0), '18:30')) === '11-10 18:30', fmt(nd(at(2026, 11, 10, 10, 0), '18:30')));
+  check('自定义 18:30，晚上 20 点 → 次日 18:30',
+    fmt(nd(at(2026, 11, 10, 20, 0), '18:30')) === '11-11 18:30');
+  check('跨月：10-31 上午 → 11-01 00:00',
+    fmt(nd(at(2026, 10, 31, 9, 0), '00:00')) === '11-01 00:00', fmt(nd(at(2026, 10, 31, 9, 0), '00:00')));
+  check('非法时刻字符串 → 按 00:00 处理',
+    fmt(nd(at(2026, 11, 10, 9, 0), 'abc')) === '11-11 00:00');
+  check('小时越界不崩（25:00 也返回合法时间戳）',
+    Number.isFinite(nd(at(2026, 11, 10, 9, 0), '25:00')));
+
+  const nowMs = Date.now();
+  const eTtl = Auth.calcExpiresAt({ bodyText: '{}' }, { ttlSeconds: 60, expiryMode: 'ttl' });
+  check('ttl 模式：约 now + 60s', Math.abs(eTtl - (nowMs + 60000)) < 2000, Math.round((eTtl - nowMs) / 1000) + 's');
+
+  const eDaily = Auth.calcExpiresAt({ bodyText: '{}' },
+    { expiryMode: 'daily', dailyExpireAt: '00:00', ttlSeconds: 86400 });
+  const expectDaily = Auth.nextDailyExpiry(Date.now(), '00:00');
+  check('daily 模式忽略 ttlSeconds，改用下一个 00:00', Math.abs(eDaily - expectDaily) < 2000, fmt(eDaily));
+  check('daily 模式的过期点一定 > 现在，且不超过 24h',
+    eDaily > nowMs && eDaily - nowMs <= 24 * 3600 * 1000 + 2000,
+    ((eDaily - nowMs) / 3600000).toFixed(2) + 'h');
+
+  check('ttl=0 仍是不过期', Auth.calcExpiresAt({ bodyText: '{}' }, { ttlSeconds: 0 }) === 0);
 
   /* -------------------- 4. 源码兜底一致性 -------------------- */
   console.log('\n[4] 源码里不再残留 Authorization 兜底');

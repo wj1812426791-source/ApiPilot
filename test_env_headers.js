@@ -128,6 +128,9 @@ console.log('\nAuth.doLogin：登录请求也带环境 Header');
   check('env.js 已移除「全局变量」区块', !envCode.includes('全局变量（所有环境共用）'));
   check('env.js 新增「环境 Header」区块', envCode.includes('环境 Header（该环境的所有请求自动携带'));
   check('store.js 新环境带 headers', storeCode.includes('headers: [],'));
+  check('新环境预置 x-current-project 环境 Header', storeCode.includes("key: 'x-current-project'"));
+  check('新环境预置 account / password 变量',
+    storeCode.includes("key: 'account'") && storeCode.includes("key: 'password'"));
   check('store.js 载入时迁移 headers', storeCode.includes('Array.isArray(e.headers) ? e.headers : []'));
   check('http.js 使用 env.headers', httpCode.includes('env.headers'));
   check('auth.js 登录合并 env.headers', authCode.includes('env.headers || []'));

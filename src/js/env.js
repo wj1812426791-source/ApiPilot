@@ -345,11 +345,38 @@ const Env = (() => {
     const sec3 = section('③ 有效期与自动重登');
     const g3 = U.el('div', { class: 'grid3' });
 
-    const ttl = U.el('input', { class: 'input', type: 'number', min: '0', value: login.ttlSeconds ?? 7200 });
-    ttl.addEventListener('input', () => { login.ttlSeconds = Number(ttl.value) || 0; save(); });
+    // 过期方式：固定秒数 / 每天固定时刻（服务端按自然日失效，比如每天 0 点）
+    const expireMode = login.expiryMode || 'ttl';
+    const expireModeSel = U.el('select', { class: 'input' }, [
+      U.el('option', { value: 'ttl', text: '固定秒数' }),
+      U.el('option', { value: 'daily', text: '每天固定时刻（自然日）' })
+    ]);
+    expireModeSel.value = expireMode;
+    expireModeSel.addEventListener('change', () => {
+      login.expiryMode = expireModeSel.value;
+      save();
+      reRender();
+    });
     g3.appendChild(U.el('label', { class: 'field' }, [
-      U.el('span', { class: 'field-label', text: '有效期（秒，0=不过期）' }), ttl
+      U.el('span', { class: 'field-label', text: '过期方式' }), expireModeSel
     ]));
+
+    if (expireMode === 'daily') {
+      const daily = U.el('input', {
+        class: 'input mono', type: 'time', step: '60',
+        value: login.dailyExpireAt || '00:00'
+      });
+      daily.addEventListener('input', () => { login.dailyExpireAt = daily.value || '00:00'; save(); });
+      g3.appendChild(U.el('label', { class: 'field' }, [
+        U.el('span', { class: 'field-label', text: '每天几点过期（如 00:00）' }), daily
+      ]));
+    } else {
+      const ttl = U.el('input', { class: 'input', type: 'number', min: '0', value: login.ttlSeconds ?? 7200 });
+      ttl.addEventListener('input', () => { login.ttlSeconds = Number(ttl.value) || 0; save(); });
+      g3.appendChild(U.el('label', { class: 'field' }, [
+        U.el('span', { class: 'field-label', text: '有效期（秒，0=不过期）' }), ttl
+      ]));
+    }
 
     const ep = U.el('input', {
       class: 'input mono', type: 'text', value: login.expirePath || '',
@@ -373,6 +400,15 @@ const Env = (() => {
       U.el('span', { class: 'field-label', text: '过期时间格式' }), eu
     ]));
     sec3.body.appendChild(g3);
+
+    if (expireMode === 'daily') {
+      sec3.body.appendChild(U.el('div', {
+        class: 'panel-caption mt',
+        text: '每天固定时刻：登录后到期时间 = 下一个「每天几点」。例如早 9 点登录、设为 00:00，'
+          + '则当天 24:00 就判为过期并自动重登，不用去猜服务端到底给多少秒。'
+          + '（如果同时填了「从响应读过期时间」，以响应为准；改完可点「登录」立即按新规则重算）'
+      }));
+    }
 
     const auto = U.el('input', { type: 'checkbox' });
     auto.checked = login.autoRelogin !== false;
