@@ -57,11 +57,14 @@ const Http = (() => {
       base = base.replace(new RegExp(':' + pv.key + '(?![\\w-])', 'g'), val);
     }
 
-    const paramItems = (req.params || []).map((p) => ({
-      key: Vars.resolve(p.key, env, ctx),
-      value: Vars.resolve(p.value ?? '', env, ctx),
-      enabled: p.enabled
-    }));
+    // 空 key 的行（表格里常见的新增未填行）不能发出去，否则 URL 会变成 ...?=值
+    const paramItems = (req.params || [])
+      .filter((p) => p.enabled !== false && String(p.key || '').trim())
+      .map((p) => ({
+        key: Vars.resolve(p.key, env, ctx),
+        value: Vars.resolve(p.value ?? '', env, ctx),
+        enabled: true
+      }));
 
     // URL 里自带的 query（变量展开出来的、或导入时残留的）要保留。
     // 同名 key 以 Params 表为准，避免编辑器双向同步时出现重复参数。

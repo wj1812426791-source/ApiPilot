@@ -482,12 +482,40 @@ const Editor = (() => {
     input.dispatchEvent(new Event('input'));
   }
 
+  /** 完整 URL：含启用中的 Params（变量已解析），用于「地址栏全选复制」；出错则退回原 URL */
+  function fullUrlOf(req) {
+    if (!req) return '';
+    const raw = req.url || '';
+    try {
+      const built = Http.build(req, Store.activeEnv());
+      const u = built && built.config && built.config.url;
+      if (u) return u;
+    } catch (_) { /* 下面手工拼一份兜底 */ }
+    const q = U.buildQuery((req.params || []).filter((p) => p.enabled !== false && p.key));
+    if (!q) return raw;
+    return U.splitUrl(raw).base + '?' + q;
+  }
+
   function onUrlKeydown(e) {
     if (suggestState.open && suggestState.items.length) {
       if (e.key === 'ArrowDown') { e.preventDefault(); suggestState.activeIdx = (suggestState.activeIdx + 1) % suggestState.items.length; highlightSuggest(U.$('#urlSuggest')); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); suggestState.activeIdx = (suggestState.activeIdx - 1 + suggestState.items.length) % suggestState.items.length; highlightSuggest(U.$('#urlSuggest')); return; }
       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); chooseUrlSuggest(suggestState.activeIdx); return; }
       if (e.key === 'Escape') { e.preventDefault(); closeUrlSuggest(); return; }
+    }
+    // Ctrl+C：地址栏只显示 base，参数在下面的表格里 —— 全选复制时补成完整 URL
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      const input = U.$('#urlInput');
+      const wholeSelected = input.selectionStart === 0 && input.selectionEnd === input.value.length;
+      if (wholeSelected && input.value) {
+        const full = fullUrlOf(currentReq());
+        if (full && full !== input.value) {
+          e.preventDefault();
+          U.copy(full).catch(() => { /* 剪贴板不可用时静默 */ });
+          UI.toast('已复制完整 URL（含查询参数）', 'ok', 1800);
+        }
+      }
+      return;
     }
     if (e.key === 'Enter') { e.preventDefault(); send(); }
   }
@@ -1168,6 +1196,7 @@ const Editor = (() => {
     openRequest, openFromHistory, newTab, closeTab, closeTabsByRef,
     current, currentReq, currentRefId, save, saveAs, send, markDirty, updateCounts,
     openBodyFind, closeBodyFind, findHitsInText,
+    fullUrlOf,
     closeTabsWhere, showTabMenu, pickActiveAfterClose, removeTabsWhere
   };
 })();

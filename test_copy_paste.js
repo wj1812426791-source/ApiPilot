@@ -65,6 +65,11 @@ function buildData() {
   const reqX = Store.newRequest('请求X');
   reqX.url = '{{baseUrl}}/a';
   reqX.method = 'POST';
+  reqX.params = [
+    { key: 'pageNum', value: '1', desc: '页码', enabled: true },
+    { key: 'pageSize', value: '10', desc: '', enabled: false }
+  ];
+  reqX.pathVars = [{ key: 'id', value: '42', desc: '', enabled: true }];
   reqX.headers = [{ key: 'x-current-project', value: 'p1', desc: '', enabled: true }];
   reqX.body = { mode: 'raw', raw: '{"a":1}', rawType: 'application/json', formdata: [], urlencoded: [] };
   colA.items = [reqX];
@@ -97,6 +102,7 @@ check('复制后剪贴板非空', Tree.hasClipboard() === true);
 // 复制后改动源节点：粘贴出来的应是「复制那一刻」的快照
 d.reqX.url = 'MUTATED';
 d.reqX.headers[0].value = 'MUTATED-VALUE';
+d.reqX.params[0].value = 'MUTATED-PARAM';
 d.reqX.name = 'MUTATED-NAME';
 
 const pasted = Tree.pasteTo(d.colC);
@@ -106,6 +112,11 @@ check('粘贴的 header 值是快照', pasted.headers[0].value === 'p1');
 check('粘贴保留了请求名', pasted.name === '请求X');
 check('粘贴保留了 method', pasted.method === 'POST');
 check('粘贴保留了 body', (pasted.body || {}).raw === '{"a":1}');
+check('粘贴保留了 params（含禁用项）',
+  Array.isArray(pasted.params) && pasted.params.length === 2 && pasted.params[1].enabled === false,
+  JSON.stringify(pasted.params));
+check('粘贴保留了 params 的说明文字', pasted.params[0].desc === '页码');
+check('粘贴保留了 pathVars', Array.isArray(pasted.pathVars) && pasted.pathVars.length === 1);
 check('新节点 id 与源不同', pasted.id !== d.reqX.id);
 check('新节点已进入集合C', d.colC.items.some((n) => n.id === pasted.id));
 check('集合C 现在有 2 个子项', d.colC.items.length === 2);
