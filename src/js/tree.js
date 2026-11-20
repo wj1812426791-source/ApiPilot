@@ -126,6 +126,7 @@ const Tree = (() => {
 
     row.addEventListener('click', () => {
       select(node.id);
+      applyBoundEnv(node);           // 该集合绑了环境 → 先切环境，再打开请求
       if (isLeaf) Editor.openRequest(node.id);
       else { node.expanded = !node.expanded; Store.save(); render(); }
     });
@@ -205,6 +206,31 @@ const Tree = (() => {
     const box = U.$('#tree');
     if (!box) return;
     U.$$('.node-row', box).forEach((r) => r.classList.toggle('kb-sel', r.dataset.id === id));
+  }
+
+  /**
+   * 点集合树节点时：若它所属的集合绑定到了某个环境，自动切换过去。
+   * 只在点击时生效（手动的环境下拉不会被覆盖），切过去后仍可手动改。
+   */
+  function applyBoundEnv(node) {
+    if (!node) return null;
+    const envs = Store.state.environments || [];
+    const col = Store.findOwnerCollection(node.id);
+    if (!col) return null;
+    const env = envs.find((e) => e && e.boundCollectionId === col.id);
+    if (!env) return null;
+    if (Store.state.activeEnvId === env.id) return env;
+
+    Store.state.activeEnvId = env.id;
+    Store.save();
+    if (typeof App !== 'undefined' && App.refreshEnvSelect) App.refreshEnvSelect();
+    if (typeof Editor !== 'undefined') {
+      if (Editor.renderAuth) Editor.renderAuth();
+      if (Editor.renderAutoHeaders) Editor.renderAutoHeaders();
+      if (Editor.syncUrlHighlight) Editor.syncUrlHighlight();
+    }
+    UI.toast(`已切换到环境「${env.name}」（集合「${col.name || '未命名'}」已绑定）`, 'ok', 2200);
+    return env;
   }
 
   function getSelected() {
@@ -465,6 +491,7 @@ const Tree = (() => {
 
   return {
     render, renderHistory, setFilter, newCollection, addRequest, addFolder,
-    select, getSelected, copyNode, pasteTo, copySelected, pasteSelected, hasClipboard
+    select, getSelected, copyNode, pasteTo, copySelected, pasteSelected, hasClipboard,
+    applyBoundEnv
   };
 })();

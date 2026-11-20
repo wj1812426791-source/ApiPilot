@@ -18,8 +18,8 @@ const Store = (() => {
     prefix: '',
     queryName: 'token',
     ttlSeconds: 7200,
-    // 过期方式：ttl=固定秒数；daily=每天固定时刻（服务端按自然日失效，如每天 0 点）
-    expiryMode: 'ttl',
+    // 过期方式：daily=每天固定时刻（多数内部系统按自然日失效，默认 0 点）；ttl=固定秒数
+    expiryMode: 'daily',
     dailyExpireAt: '00:00',
     expirePath: '',
     expireUnit: 'seconds',
@@ -46,6 +46,8 @@ const Store = (() => {
       headers: [
         { key: 'x-current-project', value: '', desc: '项目标识（按需填写）', enabled: true }
       ],
+      // 绑定集合（可选）：点击这个集合（或其下任意请求）时，自动切换到这个环境
+      boundCollectionId: null,
       login: DEFAULT_LOGIN(),
       token: DEFAULT_TOKEN()
     };
@@ -176,6 +178,7 @@ const Store = (() => {
       state.environments = (data.environments || []).map((e) => ({
         ...e,
         headers: Array.isArray(e.headers) ? e.headers : [],
+        boundCollectionId: e.boundCollectionId || null,
         login: { ...DEFAULT_LOGIN(), ...(e.login || {}) },
         token: { ...DEFAULT_TOKEN(), ...(e.token || {}) }
       }));
@@ -317,6 +320,10 @@ const Store = (() => {
   }
 
   function removeNode(id) {
+    // 被删掉的集合如果被环境绑定了，顺手解除，避免留下指向不存在集合的脏数据
+    for (const e of state.environments) {
+      if (e.boundCollectionId === id) e.boundCollectionId = null;
+    }
     // 顶层集合
     const ci = state.collections.findIndex((c) => c.id === id);
     if (ci >= 0) return state.collections.splice(ci, 1)[0];

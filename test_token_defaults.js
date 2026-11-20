@@ -71,7 +71,7 @@ const check = (name, cond, extra) => {
   check('默认登录体用 {{account}} / {{password}}',
     d.bodyRaw.includes('"account": "{{account}}"') && d.bodyRaw.includes('"password": "{{password}}"'),
     d.bodyRaw.replace(/\n/g, ' '));
-  check('默认过期方式为固定秒数', (d.expiryMode || 'ttl') === 'ttl', d.expiryMode);
+  check('默认过期方式为「每天固定时刻」', d.expiryMode === 'daily', d.expiryMode);
   check('默认每日过期时刻 00:00', d.dailyExpireAt === '00:00', d.dailyExpireAt);
 
   /* -------------------- 2. 老数据不被覆盖 -------------------- */

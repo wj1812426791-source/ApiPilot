@@ -187,6 +187,31 @@ const Env = (() => {
         '若某个请求自己在「Headers」里写了同名 Header，以请求里的为准。'
     }));
 
+    // 绑定集合（可选）：点这个集合（或它下面的任意请求）时，自动切换到这个环境
+    const colOpts = [U.el('option', { value: '', text: '不绑定（手动切换环境）' })]
+      .concat(Store.state.collections.map((c) => U.el('option', {
+        value: c.id, text: c.name || '未命名集合'
+      })));
+    const colSel = U.el('select', { class: 'input', style: 'max-width:320px' }, colOpts);
+    // 绑定的集合可能已经被删了：回落到「不绑定」，顺手把脏数据清掉
+    const boundAlive = Store.state.collections.some((c) => c.id === env.boundCollectionId);
+    if (!boundAlive && env.boundCollectionId) env.boundCollectionId = null;
+    colSel.value = boundAlive ? env.boundCollectionId : '';
+    colSel.addEventListener('change', () => {
+      env.boundCollectionId = colSel.value || null;
+      Store.save();
+      UI.toast(colSel.value ? '已绑定集合：点它会自动切到这个环境' : '已取消集合绑定', 'ok', 2200);
+    });
+
+    pane.appendChild(U.el('div', { class: 'field', style: 'margin-top:16px' }, [
+      U.el('span', { class: 'field-label', text: '绑定集合（可选）' }), colSel
+    ]));
+    pane.appendChild(U.el('div', {
+      class: 'hint', style: 'margin-top:6px',
+      text: '绑定后，在左侧点这个集合（或它下面的任意请求）会自动切换到此环境；'
+        + '切过去之后仍然可以在右上角手动换成别的环境。'
+    }));
+
     pane.appendChild(U.el('div', {
       class: 'hint', style: 'margin-top:14px',
       html: '内置动态变量：<code>{{$timestamp}}</code> <code>{{$timestampMs}}</code> <code>{{$uuid}}</code> ' +
