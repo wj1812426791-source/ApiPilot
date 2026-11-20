@@ -198,6 +198,7 @@ const Http = (() => {
   /** 发送（自动处理 Token） */
   async function send(req, { onStage, onBuilt, env, ctx, reqId } = {}) {
     const activeEnv = env !== undefined ? env : Store.activeEnv();
+    const startedAt = Date.now();
     const stage = (s) => { if (onStage) onStage(s); };
     const emitBuilt = (b) => { if (onBuilt) { try { onBuilt(b); } catch (_) { /* 回调异常不影响发送 */ } } };
     const meta = { reloggedIn: false, loginError: null, injected: null };
@@ -211,7 +212,14 @@ const Http = (() => {
     const needsToken = activeEnv && activeEnv.login && activeEnv.login.enabled && (req.auth || {}).type === 'inherit';
     if (needsToken && !Auth.isValid(activeEnv)) {
       stage('logging-in');
-      const lr = await Auth.ensureToken(activeEnv);
+      const lr = await Auth.ensureToken(activeEnv, { reqId });
+      // 登录过程中被取消：整个请求就到此为止，别再拿旧 token 去发业务请求
+      if (lr && lr.canceled) {
+        return {
+          res: { error: '请求已取消', canceled: true, timeMs: Date.now() - startedAt },
+          meta, config: null
+        };
+      }
       if (!lr.ok && !lr.skipped) {
         meta.loginError = lr.error;
       } else if (lr.ok && !lr.cached && !lr.skipped) {
@@ -231,7 +239,13 @@ const Http = (() => {
     // 阶段 3：认证失效 → 重登一次 → 重发
     if (!res.error && needsToken && Auth.shouldRelogin(activeEnv, res)) {
       stage('relogin');
-      const lr = await Auth.login(activeEnv);
+      const lr = await Auth.login(activeEnv, { reqId });
+      if (lr && lr.canceled) {
+        return {
+          res: { error: '请求已取消', canceled: true, timeMs: Date.now() - startedAt },
+          meta, config: built.config
+        };
+      }
       if (lr.ok) {
         meta.reloggedIn = true;
         built = build(req, activeEnv, ctx);

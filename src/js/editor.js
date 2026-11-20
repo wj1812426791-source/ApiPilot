@@ -1035,7 +1035,18 @@ const Editor = (() => {
     canceling = true;
     const btn = U.$('#btnSend');
     if (btn) btn.innerHTML = '<span class="spin"></span> 取消中…';
-    try { await window.api.cancel(sendingReqId); } catch (_) { /* 忽略取消异常 */ }
+    let r = null;
+    try { r = await window.api.cancel(sendingReqId); } catch (_) { /* 忽略取消异常 */ }
+
+    // 主进程没找到这条请求（已经结束 / 当时处在不可取消的阶段）：
+    // 不能把按钮永远留在「取消中…」，恢复成可再点的状态并说明原因
+    if (!r || !r.ok) {
+      canceling = false;
+      if (sending) renderSendBusy();
+      else resetSendButton();
+      UI.toast('没能取消：这条请求可能已经结束，或正在自动登录（登录阶段已支持取消，可再点一次）',
+        'warn', 3200);
+    }
   }
 
   /* ==================================================================

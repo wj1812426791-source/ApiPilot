@@ -148,7 +148,7 @@ const Auth = (() => {
   /* ------------------------------------------------------------------
      执行登录
      ------------------------------------------------------------------ */
-  async function doLogin(env) {
+  async function doLogin(env, opts = {}) {
     const login = env.login || {};
     const url = Vars.resolve(login.url || '', env);
     if (!url) return { ok: false, error: '登录 URL 为空，请先在环境里配置' };
@@ -200,10 +200,14 @@ const Auth = (() => {
       ignoreSSL: login.ignoreSSL !== false,
       useCookieJar: login.useCookieJar !== false,
       followRedirect: true,
-      timeout: 30000
+      timeout: 30000,
+      // 带上调用方的 reqId：卡在「自动登录」阶段时也能被「取消发送」掐断
+      reqId: opts.reqId
     });
 
-    if (res.error) return { ok: false, error: res.error, res };
+    if (res.error) {
+      return { ok: false, error: res.error, canceled: !!res.canceled, res };
+    }
     if (res.status >= 400) {
       return {
         ok: false,
@@ -231,19 +235,19 @@ const Auth = (() => {
   }
 
   /** 带并发去重的登录 */
-  function login(env) {
+  function login(env, opts = {}) {
     if (!env) return Promise.resolve({ ok: false, error: '没有选中环境' });
     if (pending.has(env.id)) return pending.get(env.id);
-    const p = doLogin(env).finally(() => pending.delete(env.id));
+    const p = doLogin(env, opts).finally(() => pending.delete(env.id));
     pending.set(env.id, p);
     return p;
   }
 
   /** 确保 token 可用：无效则自动登录 */
-  async function ensureToken(env, { force = false } = {}) {
+  async function ensureToken(env, { force = false, reqId } = {}) {
     if (!env || !env.login || !env.login.enabled) return { ok: true, skipped: true };
     if (!force && isValid(env)) return { ok: true, cached: true };
-    const r = await login(env);
+    const r = await login(env, { reqId });
     if (r.ok) {
       App.refreshTokenChip();
     }
